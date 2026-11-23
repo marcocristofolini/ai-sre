@@ -1,4 +1,7 @@
 import asyncio
+import logging
+import math
+import re
 from datetime import UTC, datetime
 
 import httpx
@@ -352,3 +355,84 @@ def test_empty_llm_reply_does_not_add_empty_assistant_turn():
     msgs, _ = llm.calls[1]
     assert all(m.content for m in msgs if m.role == "assistant")
     assert msgs[-1].role == "user"
+
+
+# --- fix round 1 ----------------------------------------------------------
+
+class ReadingLLM:
+    """LLM falso que só conhece o que está no texto renderizado das mensagens."""
+
+    name = "fake"
+    is_external = False
+
+    def __init__(self, tool, args, pick):
+        self.tool, self.args, self.pick = tool, args, pick
+        self.calls = 0
+
+    async def complete(self, messages, tools):
+        self.calls += 1
+        tool_msgs = [m for m in messages if m.role == "tool"]
+        if not tool_msgs:
+            return call(self.tool, self.args, id="t")
+        header = tool_msgs[-1].content.splitlines()[0]
+        return LLMResponse(text=None, tool_calls=[ToolCall(id="f", name=FINAL_TOOL_NAME, args={
+            "cause": "Falha de resolução", "confidence": 0.5,
+            "evidence": [{**self.pick(header), "summary": "visto no log"}],
+        })])
+
+
+def _loki_ok():
+    return LokiTool("http://loki", timeout=1, transport=httpx.MockTransport(
+        lambda r: httpx.Response(200, json={"data": "dns-error"})))
+
+
+LOGQL = '{namespace="eval-5"} |= "dns-error"'
+
+
+def test_llm_citing_the_evidence_id_it_saw_keeps_log_evidence():
+    llm = ReadingLLM("loki", {"query": LOGQL}, lambda h: {"id": re.search(r'id="([^"]+)"', h).group(1)})
+    rca = run([_loki_ok()], llm)
+    assert not rca.unknown and rca.cause == "Falha de resolução"
+    assert [e.ref for e in rca.evidence] == [f"log:{LOGQL}"]
+
+
+def test_llm_copying_the_displayed_ref_verbatim_keeps_log_evidence():
+    llm = ReadingLLM("loki", {"query": LOGQL}, lambda h: {"ref": re.search(r' ref="([^"]*)"', h).group(1)})
+    rca = run([_loki_ok()], llm)
+    assert not rca.unknown
+    assert [e.ref for e in rca.evidence] == [f"log:{LOGQL}"]
+
+
+def test_unknown_evidence_id_is_dropped():
+    k8s = FakeTool("kubernetes", [ok("k8s:pods")])
+    llm = FakeLLM([call("kubernetes", {"q": "x"}), call(FINAL_TOOL_NAME, {
+        "cause": "X", "confidence": 0.9, "evidence": [{"id": "E99", "summary": "?"}]})])
+    assert run([k8s], llm).unknown
+
+
+@pytest.mark.parametrize("conf", [math.nan, math.inf, -math.inf, "nan", "inf", None, [0.5]])
+def test_non_finite_or_non_numeric_confidence_returns_unknown(conf):
+    k8s = FakeTool("kubernetes", [ok("k8s:pod/api-1"), ok("k8s:events")])
+    llm = FakeLLM([
+        call("kubernetes", {"q": "x"}, id="1"),
+        call("kubernetes", {"q": "y"}, id="2"),
+        final("OOMKilled", ["k8s:pod/api-1", "k8s:events"], conf),
+    ])
+    rca = run([k8s], llm)
+    assert rca.unknown and rca.cause is None and rca.confidence == 0.0
+
+
+def test_llm_error_is_logged_without_its_message(caplog):
+    llm = FakeLLM([RuntimeError("segredo-no-corpo-do-erro")])
+    with caplog.at_level(logging.WARNING, logger="aisre.agent.loop"):
+        assert run([], llm).unknown
+    assert "RuntimeError" in caplog.text
+    assert "segredo-no-corpo-do-erro" not in caplog.text
+
+
+def test_system_prompt_has_no_scenario_answer():
+    from aisre.harness.scenarios import SCENARIOS
+
+    prompt = SYSTEM_PROMPT.casefold()
+    for s in SCENARIOS:
+        assert s.expected_cause.casefold() not in prompt, s.id

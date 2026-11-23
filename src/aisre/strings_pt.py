@@ -31,3 +31,4 @@ EVIDENCIA_COLETADA_SEM_CONCLUSAO = "Consulta executada com sucesso; dados coleta
 EVIDENCIA_CONSULTA_FALHOU = "Consulta falhou: {erro}"
 ERRO_FERRAMENTA_SEM_DETALHE = "erro não informado"
 ERRO_EVAL_CONFIGURACAO = "erro de configuração do agente no harness: {detalhe}"
+AVISO_LLM_FALHA_INVESTIGACAO = "falha do provedor de LLM durante a investigação ({tipo}); resultado: não sei"

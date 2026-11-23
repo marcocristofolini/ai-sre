@@ -1,13 +1,13 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: aisre-crashloop-bad-config
+  name: eval-2
 ---
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: app-config
-  namespace: aisre-crashloop-bad-config
+  name: app-settings
+  namespace: eval-2
 data:
   app.conf: "port = not-a-number"
 ---
@@ -15,7 +15,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: app
-  namespace: aisre-crashloop-bad-config
+  namespace: eval-2
 spec:
   replicas: 1
   selector:
@@ -32,4 +32,4 @@ spec:
             - {name: cfg, mountPath: /etc/app}
       volumes:
         - name: cfg
-          configMap: {name: app-config}
+          configMap: {name: app-settings}

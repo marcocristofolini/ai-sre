@@ -16,6 +16,7 @@ SCEN = Scenario(
     id="oom-kill",
     fault="pod morto por OOM",
     expected_cause="OOMKilled",
+    namespace="eval-1",
     expected_evidence_refs=["k8s:pod"],
 )
 
@@ -29,7 +30,7 @@ def _rca(cause, refs):
 
 
 def test_grade_true_when_cause_matches_and_ref_starts_with_expected_pattern():
-    assert grade(_rca("  oomkilled ", ["k8s:pod/leaker", "metric:up"]), SCEN)
+    assert grade(_rca("  oomkilled ", ["k8s:pod/worker", "metric:up"]), SCEN)
     assert grade(_rca("OOMKilled", ["k8s:pods"]), SCEN)
 
 
@@ -42,11 +43,11 @@ def test_grade_false_when_ref_is_of_wrong_kind():
 
 
 def test_grade_false_when_pattern_appears_but_not_as_prefix():
-    assert not grade(_rca("OOMKilled", ["log:k8s:pod/leaker"]), SCEN)
+    assert not grade(_rca("OOMKilled", ["log:k8s:pod/worker"]), SCEN)
 
 
 def test_grade_false_when_cause_wrong_even_with_expected_evidence():
-    assert not grade(_rca("DiskPressure no nó", ["k8s:pod/leaker"]), SCEN)
+    assert not grade(_rca("DiskPressure no nó", ["k8s:pod/worker"]), SCEN)
 
 
 def test_grade_false_when_unknown():
@@ -58,7 +59,7 @@ def test_grade_false_when_unknown_even_carrying_expected_evidence():
         cause=None,
         confidence=0.0,
         unknown=True,
-        evidence=[Evidence(kind="k8s", ref="k8s:pod/leaker", summary="x")],
+        evidence=[Evidence(kind="k8s", ref="k8s:pod/worker", summary="x")],
     )
     assert not grade(rca, SCEN)
 
@@ -107,14 +108,14 @@ async def _real_ref(kind: str, args: dict) -> str:
 
 # Consultas que um agente perfeito faria para cada falha.
 PERFECT_QUERIES = {
-    "oom-kill": [("k8s", {"kind": "pod", "namespace": "aisre-oom-kill", "name": "leaker"})],
-    "crashloop-bad-config": [("log", {"query": '{namespace="aisre-crashloop-bad-config"}'})],
+    "oom-kill": [("k8s", {"kind": "pod", "namespace": "eval-1", "name": "worker"})],
+    "crashloop-bad-config": [("log", {"query": '{namespace="eval-2"}'})],
     "bad-deploy-latency": [
         ("commit", {}),
         ("metric", {"query": "histogram_quantile(0.99, rate(http_request_duration_seconds_bucket[5m]))"}),
     ],
     "node-disk-pressure": [("k8s", {"kind": "nodes"})],
-    "dns-failure": [("log", {"query": '{namespace="aisre-dns-failure"} |= "dns-error"'})],
+    "dns-failure": [("log", {"query": '{namespace="eval-5"} |= "dns-error"'})],
 }
 
 

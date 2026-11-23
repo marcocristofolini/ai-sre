@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+import math
 from datetime import datetime
 from typing import get_args
 
@@ -17,6 +19,8 @@ from aisre.tools.base import Tool, ToolResult
 EVIDENCE_KINDS = set(get_args(Evidence.model_fields["kind"].annotation))
 SINGLE_EVIDENCE_MAX_CONFIDENCE = 0.6
 
+log = logging.getLogger(__name__)
+
 
 class Alert(BaseModel):
     name: str
@@ -25,7 +29,8 @@ class Alert(BaseModel):
 
 
 class _Cited(BaseModel):
-    ref: str
+    id: str | None = None  # id opaco (E1, E2...) mostrado no cabeçalho do dado
+    ref: str | None = None  # aceito se igual ao ref original ou ao exibido
     summary: str = ""
 
 
@@ -46,6 +51,9 @@ class _Investigation:
         self.tools = {tool.name: tool for tool in tools}
         self.results: dict[str, ToolResult] = {}  # último resultado por ref, em ordem
         self.citable: set[str] = set()  # refs devolvidos com ok=True nesta investigação
+        # id opaco e ref exibido (escapado) -> ref original; só para resultados ok.
+        self.ids: dict[str, str] = {}
+        self.aliases: dict[str, str] = {}
 
     def specs(self) -> list[dict]:
         specs = [
@@ -80,9 +88,25 @@ class _Investigation:
         if not isinstance(result, ToolResult):
             return p.wrap_data(p.TOOL_ERR_EXCEPTION.format(detalhe=type(result).__name__), ok="false")
         self.results[result.ref] = result
+        evidence_id = None
         if result.ok:
             self.citable.add(result.ref)
-        return p.render_tool_result(result.ref, result.ok, result.data, result.error)
+            evidence_id = next((i for i, r in self.ids.items() if r == result.ref), None)
+            if evidence_id is None:
+                evidence_id = f"E{len(self.ids) + 1}"
+                self.ids[evidence_id] = result.ref
+            self.aliases[p.displayed_ref(result.ref)] = result.ref
+        return p.render_tool_result(result.ref, result.ok, result.data, result.error, evidence_id)
+
+    def resolve(self, item: _Cited) -> str | None:
+        """Ref original citado, ou None se não foi devolvido com ok=True aqui."""
+        if item.id is not None and item.id.strip() in self.ids:
+            return self.ids[item.id.strip()]
+        if item.ref is not None:
+            if item.ref in self.citable:
+                return item.ref
+            return self.aliases.get(item.ref)
+        return None
 
     def collected(self) -> list[Evidence]:
         """Tudo que foi consultado, com o erro registrado quando a consulta falhou."""
@@ -106,16 +130,23 @@ class _Investigation:
 
     def conclude(self, args: dict) -> RCA:
         try:
+            return self._conclude(args)
+        except Exception:  # qualquer resposta final inválida vira "não sei"
+            return self.unknown()
+
+    def _conclude(self, args: dict) -> RCA:
+        try:
             answer = _FinalAnswer.model_validate(args)
         except ValidationError:
             return self.unknown()
         cited: list[Evidence] = []
         for item in answer.evidence:
-            kind = _kind(item.ref)
-            if item.ref in self.citable and kind and item.ref not in {e.ref for e in cited}:
-                cited.append(Evidence(kind=kind, ref=item.ref, summary=item.summary.strip()))
+            ref = self.resolve(item)
+            kind = _kind(ref) if ref else None
+            if ref and kind and ref not in {e.ref for e in cited}:
+                cited.append(Evidence(kind=kind, ref=ref, summary=item.summary.strip()))
         cause = (answer.cause or "").strip() or None
-        if cause is None or not cited:
+        if cause is None or not cited or not math.isfinite(answer.confidence):
             return self.unknown(cited)
         confidence = min(max(answer.confidence, 0.0), 1.0)
         if len(cited) == 1:
@@ -140,7 +171,9 @@ async def investigate(alert: Alert, tools: list[Tool], llm: LLMProvider, max_ste
             response = await llm.complete(messages, specs)
         except ConsentRequired:
             raise
-        except Exception:
+        except Exception as exc:
+            # Só o tipo: a mensagem pode conter trechos do pedido.
+            log.warning(t.AVISO_LLM_FALHA_INVESTIGACAO.format(tipo=type(exc).__name__))
             return inv.unknown()
         final = next((c for c in response.tool_calls if c.name == p.FINAL_TOOL_NAME), None)
         if final is not None:

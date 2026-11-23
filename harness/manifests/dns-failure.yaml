@@ -1,21 +1,21 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: aisre-dns-failure
+  name: eval-5
 ---
 # Cliente com resolvedor inexistente: toda resolução de nomes falha.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: dns-client
-  namespace: aisre-dns-failure
+  name: worker
+  namespace: eval-5
 spec:
   replicas: 1
   selector:
-    matchLabels: {app: dns-client}
+    matchLabels: {app: worker}
   template:
     metadata:
-      labels: {app: dns-client}
+      labels: {app: worker}
     spec:
       dnsPolicy: None
       dnsConfig:
@@ -24,6 +24,6 @@ spec:
           - {name: timeout, value: "1"}
           - {name: attempts, value: "1"}
       containers:
-        - name: client
+        - name: main
           image: busybox:1.36
           command: ["sh", "-c", "while true; do nslookup kubernetes.default.svc.cluster.local || echo 'dns-error: resolucao falhou'; sleep 5; done"]

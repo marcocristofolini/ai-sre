@@ -1,13 +1,13 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: aisre-oom-kill
+  name: eval-1
 ---
 apiVersion: v1
 kind: Pod
 metadata:
-  name: leaker
-  namespace: aisre-oom-kill
+  name: worker
+  namespace: eval-1
 spec:
   restartPolicy: Always
   containers:

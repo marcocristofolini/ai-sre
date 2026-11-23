@@ -1,20 +1,20 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: aisre-node-disk-pressure
+  name: eval-4
 ---
 # Enche o disco do nó do kind via hostPath para provocar DiskPressure.
 # O cleanup (kubectl delete --wait) dispara o preStop que remove o arquivo.
 apiVersion: v1
 kind: Pod
 metadata:
-  name: disk-filler
-  namespace: aisre-node-disk-pressure
+  name: worker
+  namespace: eval-4
 spec:
   restartPolicy: Never
   terminationGracePeriodSeconds: 60
   containers:
-    - name: filler
+    - name: main
       image: busybox:1.36
       # Enche o nodefs até sobrar ~5% livre (limiar padrão do kubelet: 10%),
       # proporcional ao disco real. O arquivo é removido no preStop, no delete.

@@ -119,16 +119,23 @@ def _unknown_investigate(_scenario: Scenario) -> RCA:
 def scenario_alert(scenario: Scenario) -> Alert:
     return Alert(
         name=EVAL_ALERT_NAME,
-        labels={"namespace": f"aisre-{scenario.id}"},
+        labels={"namespace": scenario.namespace},
         fired_at=datetime.now(UTC),
     )
 
 
-def agent_investigator(llm: LLMProvider, tools: list[Tool]) -> Callable[[Scenario], RCA]:
-    """Adapta o agente assíncrono ao contrato síncrono de `run_all`."""
+def agent_investigator(
+    provider_factory: Callable[[], LLMProvider], tools: list[Tool]
+) -> Callable[[Scenario], RCA]:
+    """Adapta o agente assíncrono ao contrato síncrono de `run_all`.
+
+    Cada cenário roda em um `asyncio.run` próprio; o provedor (e seu cliente HTTP
+    assíncrono, preso ao event loop) é criado a cada cenário para nunca ser reutilizado
+    em um loop já fechado.
+    """
 
     def _investigate(scenario: Scenario) -> RCA:
-        return asyncio.run(investigate(scenario_alert(scenario), tools, llm))
+        return asyncio.run(investigate(scenario_alert(scenario), tools, provider_factory()))
 
     return _investigate
 
@@ -147,11 +154,11 @@ def main(argv: list[str]) -> int:
     if use_agent:
         settings = Settings()
         try:
-            llm = build_provider(settings)
+            llm = build_provider(settings)  # valida a configuração antes de injetar falhas
         except ValueError as exc:
             print(t.ERRO_EVAL_CONFIGURACAO.format(detalhe=exc), file=sys.stderr)
             return 2
-        investigator = agent_investigator(llm, build_tools(settings))
+        investigator = agent_investigator(lambda: build_provider(settings), build_tools(settings))
         model = f"{llm.name}:{settings.llm_model}"
     try:
         board = run_all(investigator, model, kubeconfig=os.environ.get("KUBECONFIG", ""))

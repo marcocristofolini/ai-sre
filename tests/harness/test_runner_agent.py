@@ -1,7 +1,9 @@
+import asyncio
 import functools
 import json
 
 import pytest
+import yaml
 
 from aisre import strings_pt as t
 from aisre.config import Settings
@@ -44,10 +46,10 @@ class FakeLLM:
             ns = next(line.split(": ", 1)[1] for line in messages[1].content.splitlines()
                       if line.startswith("namespace: "))
             return LLMResponse(text=None, tool_calls=[ToolCall(
-                id="1", name="kubernetes", args={"kind": "pod", "namespace": ns, "name": "leaker"})])
+                id="1", name="kubernetes", args={"kind": "pod", "namespace": ns, "name": "worker"})])
         return LLMResponse(text=None, tool_calls=[ToolCall(id="2", name="finalizar", args={
             "cause": "OOMKilled", "confidence": 0.9,
-            "evidence": [{"ref": "k8s:pod/leaker", "summary": "lastState OOMKilled"}],
+            "evidence": [{"ref": "k8s:pod/worker", "summary": "lastState OOMKilled"}],
         })])
 
 
@@ -93,11 +95,12 @@ def test_agent_mode_builds_provider_and_tools_from_settings_and_investigates(
     # só o cenário de OOM tem a causa que o LLM falso sempre responde
     assert (board["correct"], board["total"]) == (1, len(SCENARIOS))
     assert board["model"] == "fake:modelo-teste"
-    assert len(harness["settings"]) == 2 and all(isinstance(s, Settings) for s in harness["settings"])
+    # provedor: 1 validação + 1 por cenário; ferramentas: 1
+    assert len(harness["settings"]) == 2 + len(SCENARIOS)
+    assert all(isinstance(s, Settings) for s in harness["settings"])
     namespaces = [c["namespace"] for c in harness["tools"][0].calls]
-    assert namespaces == [f"aisre-{s.id}" for s in SCENARIOS]
+    assert namespaces == [s.namespace for s in SCENARIOS]
     # o alerta entregue ao agente não traz a causa esperada nem o rótulo da falha
-    # (o namespace vem dos manifestos e contém o id do cenário)
     for alert_text, s in zip(harness["llm"].alerts, SCENARIOS, strict=True):
         assert s.expected_cause not in alert_text
         assert f"alerta: {runner.EVAL_ALERT_NAME}" in alert_text
@@ -145,3 +148,59 @@ def test_run_all_propagates_consent_required_after_cleanup():
             cleanup=lambda h: cleaned.append(h.scenario_id),
         )
     assert cleaned == [SCENARIOS[0].id]
+
+
+# --- fix round 1 ----------------------------------------------------------
+
+class LoopBoundLLM(FakeLLM):
+    """Como um cliente HTTP assíncrono: inutilizável em outro event loop."""
+
+    def __init__(self):
+        super().__init__()
+        self.loop = None
+
+    async def complete(self, messages, tools):
+        loop = asyncio.get_running_loop()
+        if self.loop is None:
+            self.loop = loop
+        elif self.loop is not loop:
+            raise RuntimeError("Event loop is closed")
+        return await super().complete(messages, tools)
+
+
+def test_agent_mode_never_reuses_a_provider_across_event_loops(harness, monkeypatch, tmp_path):
+    built = []
+
+    def provider(settings):
+        built.append(LoopBoundLLM())
+        return built[-1]
+
+    monkeypatch.setattr(runner, "build_provider", provider)
+    out = tmp_path / "sb.json"
+    assert runner.main([str(out), "--agent"]) == 0
+    board = json.loads(out.read_text())
+    assert board["correct"] == 1  # oom-kill não virou "não sei" por erro de loop
+    assert len(harness["tools"][0].calls) == len(SCENARIOS)
+
+
+def test_alert_and_namespace_do_not_reveal_the_scenario(harness, tmp_path):
+    assert runner.main([str(tmp_path / "sb.json"), "--agent"]) == 0
+    for alert_text, s in zip(harness["llm"].alerts, SCENARIOS, strict=True):
+        assert f"namespace: {s.namespace}" in alert_text
+        for word in [s.id, s.fault, s.expected_cause, *s.id.split("-"), *s.fault.split("-")]:
+            if len(word) > 3:
+                assert word.casefold() not in alert_text.casefold(), (s.id, word)
+
+
+def test_scenario_namespaces_are_neutral_and_match_manifests():
+    from aisre.harness.runner import manifest_path
+
+    for s in SCENARIOS:
+        docs = [d for d in yaml.safe_load_all(manifest_path(s).read_text()) if d]
+        namespaces = {d["metadata"]["name"] for d in docs if d["kind"] == "Namespace"}
+        assert namespaces == {s.namespace}
+        assert all(d["metadata"].get("namespace", s.namespace) == s.namespace for d in docs)
+        names = {d["metadata"]["name"] for d in docs}
+        for word in [s.id, *s.id.split("-"), *s.fault.split("-")]:
+            if len(word) > 3:
+                assert not any(word in n for n in names), (s.id, word, names)

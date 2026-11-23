@@ -1,13 +1,13 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: aisre-bad-deploy-latency
+  name: eval-3
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: api
-  namespace: aisre-bad-deploy-latency
+  namespace: eval-3
   annotations:
     kubernetes.io/change-cause: "deploy recente: adiciona sleep de 2s em cada requisicao"
 spec:
