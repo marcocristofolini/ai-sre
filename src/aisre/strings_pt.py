@@ -25,3 +25,8 @@ ERRO_LLM_PROVEDOR_DESCONHECIDO = "Provedor de LLM não suportado: {nome}"
 ERRO_LLM_SEM_CHAVE = "Provedor externo exige AISRE_LLM_API_KEY."
 ERRO_LLM_SEM_URL_LOCAL = "Provedor local exige AISRE_LLM_BASE_URL."
 ERRO_LLM_FALHA = "Falha ao chamar o provedor de LLM ({detalhe})."
+
+# Agente de investigação
+EVIDENCIA_COLETADA_SEM_CONCLUSAO = "Consulta executada com sucesso; dados coletados sem conclusão."
+EVIDENCIA_CONSULTA_FALHOU = "Consulta falhou: {erro}"
+ERRO_FERRAMENTA_SEM_DETALHE = "erro não informado"
