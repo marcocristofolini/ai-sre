@@ -19,3 +19,5 @@ class Settings(BaseSettings):
     github_repo: str = ""
     github_api_url: str = "https://api.github.com"
     kubernetes_enabled: bool = False
+    dedupe_window_seconds: int = 300
+    investigation_timeout_seconds: int = 300

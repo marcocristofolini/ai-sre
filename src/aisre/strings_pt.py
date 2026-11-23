@@ -32,3 +32,19 @@ EVIDENCIA_CONSULTA_FALHOU = "Consulta falhou: {erro}"
 ERRO_FERRAMENTA_SEM_DETALHE = "erro não informado"
 ERRO_EVAL_CONFIGURACAO = "erro de configuração do agente no harness: {detalhe}"
 AVISO_LLM_FALHA_INVESTIGACAO = "falha do provedor de LLM durante a investigação ({tipo}); resultado: não sei"
+
+# API, armazenamento e memória
+ERRO_WEBHOOK_JSON_INVALIDO = "Corpo da requisição não é um JSON válido."
+ERRO_WEBHOOK_PAYLOAD_INVALIDO = "Payload do Alertmanager inválido: esperado um objeto com a lista 'alerts'."
+ERRO_WEBHOOK_SEM_ALERTAS = "Payload do Alertmanager sem alertas."
+ERRO_WEBHOOK_ALERTA_INVALIDO = "Alerta inválido no índice {indice}: {detalhe}"
+ERRO_ALERTA_SEM_NOME = "o rótulo 'alertname' é obrigatório"
+ERRO_INCIDENTE_NAO_ENCONTRADO = "Incidente não encontrado."
+ERRO_INVESTIGACAO_CONSENTIMENTO = (
+    "Investigação não executada por erro de configuração: " + ERRO_CONSENTIMENTO_LLM
+)
+ERRO_INVESTIGACAO_FALHOU = "A investigação falhou ({tipo})."
+ERRO_INVESTIGACAO_TIMEOUT = "A investigação excedeu o tempo limite de {segundos}s."
+AVISO_HOOK_RCA_FALHOU = "hook on_rca_ready falhou ({tipo})"
+AVISO_MEMORIA_FALHOU = "não foi possível salvar o incidente na memória ({tipo})"
+AVISO_STORE_EM_MEMORIA = "AISRE_DATABASE_URL não definido: incidentes ficam apenas em memória e são perdidos ao reiniciar."

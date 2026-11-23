@@ -13,6 +13,9 @@ dependencies = [
     "httpx>=0.27",
     "kubernetes>=29",
     "anthropic>=0.40",
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+    "psycopg[binary]>=3.1",
 ]
 
 [project.optional-dependencies]
@@ -24,4 +27,7 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
-markers = ["e2e: exige cluster kind real (defina AISRE_E2E=1)"]
+markers = [
+    "e2e: exige cluster kind real (defina AISRE_E2E=1)",
+    "integration: exige Postgres com pgvector (defina AISRE_TEST_DATABASE_URL)",
+]
