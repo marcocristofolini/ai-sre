@@ -31,10 +31,60 @@ def _default_client() -> Any:
     return client.CoreV1Api()
 
 
-def _to_text(obj: Any) -> str:
+def _camel(key: str) -> str:
+    head, *rest = key.split("_")
+    return head + "".join(w.capitalize() for w in rest)
+
+
+def _normalize(obj: Any) -> Any:
+    """to_dict() (snake_case) -> dict com chaves camelCase, como na API."""
     if hasattr(obj, "to_dict"):
         obj = obj.to_dict()
-    return json.dumps(obj, default=str)
+    if isinstance(obj, dict):
+        return {_camel(str(k)): _normalize(v) for k, v in obj.items()}
+    if isinstance(obj, list | tuple):
+        return [_normalize(v) for v in obj]
+    return obj
+
+
+def _pick(d: Any, keys: tuple[str, ...]) -> dict:
+    d = d if isinstance(d, dict) else {}
+    return {k: d[k] for k in keys if d.get(k) is not None}
+
+
+def _project_item(item: dict) -> dict:
+    """Mantém só os campos de diagnóstico (descarta managedFields, spec etc.)."""
+    meta = _pick(item.get("metadata"), ("name", "namespace"))
+    status = item.get("status") if isinstance(item.get("status"), dict) else {}
+    out: dict = {"metadata": meta} if meta else {}
+    if "reason" in item or "message" in item:  # evento
+        out.update(_pick(item, ("type", "reason", "message", "count")))
+        out["involvedObject"] = _pick(item.get("involvedObject"), ("kind", "name"))
+        return out
+    st: dict = _pick(status, ("phase",))
+    conds = status.get("conditions")
+    if conds:
+        st["conditions"] = [
+            _pick(c, ("type", "status", "reason", "message")) for c in conds if isinstance(c, dict)
+        ]
+    cs = status.get("containerStatuses")
+    if cs:
+        st["containerStatuses"] = [
+            _pick(c, ("name", "ready", "restartCount", "state", "lastState"))
+            for c in cs
+            if isinstance(c, dict)
+        ]
+    out["status"] = st
+    return out
+
+
+def _to_text(obj: Any) -> str:
+    data = _normalize(obj)
+    if isinstance(data, dict) and isinstance(data.get("items"), list):
+        data = {"items": [_project_item(i) for i in data["items"] if isinstance(i, dict)]}
+    elif isinstance(data, dict):
+        data = _project_item(data)
+    return json.dumps(data, default=str)
 
 
 class KubernetesTool:

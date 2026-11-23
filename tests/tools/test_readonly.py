@@ -113,3 +113,64 @@ def test_build_tools_skips_unconfigured():
     assert {t.name for t in build_tools(s)} == {"prometheus", "loki", "github"}
     s2 = Settings(_env_file=None, kubernetes_enabled=True)
     assert [t.name for t in build_tools(s2)] == ["kubernetes"]
+
+
+def test_kubernetes_evidence_survives_truncation_for_large_pod():
+    big = "x" * 5000
+    pod = {
+        "metadata": {"name": "api", "namespace": "default",
+                     "managedFields": [{"manager": big, "fieldsV1": {big: {}}} for _ in range(10)]},
+        "spec": {"containers": [{"name": "c", "env": [{"name": f"V{i}", "value": big} for i in range(5)]}]},
+        "status": {"phase": "Running",
+                   "containerStatuses": [{"name": "c", "restartCount": 3,
+                                          "lastState": {"terminated": {"reason": "OOMKilled"}}}]},
+    }
+
+    class Big(FakeCore):
+        def read_namespaced_pod(self, name, namespace, **kw):
+            return pod
+
+        def list_node(self, **kw):
+            return {"items": [{"metadata": {"name": f"n{i}", "managedFields": [big] * 5},
+                               "spec": {"taints": [big]},
+                               "status": {"conditions": [{"type": "DiskPressure", "status": "True",
+                                                          "message": "pouco disco"}]}}
+                              for i in range(3)]}
+
+    tool = KubernetesTool(client=Big(), timeout=5)
+    res = asyncio.run(tool.call({"kind": "pod", "namespace": "default", "name": "api"}))
+    assert res.ok and "OOMKilled" in res.data and "managedFields" not in res.data
+    res = asyncio.run(tool.call({"kind": "nodes"}))
+    assert res.ok and "DiskPressure" in res.data and "managedFields" not in res.data
+
+
+def test_kubernetes_projects_to_dict_objects_snake_case():
+    class Obj:
+        def to_dict(self):
+            return {"metadata": {"name": "p"}, "status": {"container_statuses": [
+                {"name": "c", "restart_count": 1,
+                 "last_state": {"terminated": {"reason": "OOMKilled"}}}]}}
+
+    class C(FakeCore):
+        def read_namespaced_pod(self, name, namespace, **kw):
+            return Obj()
+
+    res = asyncio.run(KubernetesTool(client=C(), timeout=5).call({"kind": "pod", "name": "p"}))
+    assert "OOMKilled" in res.data and "lastState" in res.data
+
+
+def test_github_ref_matches_returned_data():
+    commits = [{"sha": "aaaaaaa1111", "commit": {"message": "primeiro"}},
+               {"sha": "bbbbbbb2222", "commit": {"message": "segundo"}}]
+
+    def handler(request):
+        if request.url.path.endswith("/commits/bbbbbbb2222"):
+            return httpx.Response(200, json=commits[1])
+        n = int(request.url.params.get("per_page", 30))
+        return httpx.Response(200, json=commits[:n])
+
+    tool = GitHubTool("o/r", "tok", timeout=5, transport=httpx.MockTransport(handler))
+    res = asyncio.run(tool.call({}))
+    assert res.ref == "commit:o/r@aaaaaaa" and "aaaaaaa1111" in res.data and "bbbbbbb" not in res.data
+    res = asyncio.run(tool.call({"sha": "bbbbbbb2222"}))
+    assert res.ref == "commit:o/r@bbbbbbb" and "bbbbbbb2222" in res.data and "aaaaaaa" not in res.data
