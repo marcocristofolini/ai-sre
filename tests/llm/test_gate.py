@@ -120,3 +120,15 @@ def test_local_provider_hosted_url_requires_consent(url):
 def test_local_provider_hosted_url_with_consent_passes_gate():
     p = build_provider(_settings(True, llm_provider="local", llm_base_url="https://api.openai.com"))
     assert p.is_external is True  # passa pelo portão; a chamada real não é feita aqui
+
+
+@pytest.mark.parametrize("url", ["http://134744072", "http://0x08080808", "http://0x08.0x08.0x08.0x08", "http://1.1.1", "http://134744072:8000"])
+def test_encoded_public_ip_requires_consent(url):
+    p = build_provider(_settings(False, llm_provider="local", llm_base_url=url))
+    assert p.is_external is True
+
+
+@pytest.mark.parametrize("url", ["http://2130706433", "http://0x7f000001", "http://127.1"])
+def test_encoded_loopback_classified_by_real_address(url):
+    p = build_provider(_settings(False, llm_provider="local", llm_base_url=url))
+    assert p.is_external is False

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ipaddress
 import json
+import socket
 from urllib.parse import urlparse
 
 import httpx
@@ -36,6 +37,13 @@ def is_local_url(url: str) -> bool:
     try:
         ip = ipaddress.ip_address(host)
     except ValueError:
+        try:
+            # Formas legadas (decimal, hex, octal, "127.1") que o resolvedor aceita como IPv4.
+            ip = ipaddress.ip_address(socket.inet_ntoa(socket.inet_aton(host)))
+        except (OSError, ValueError):
+            pass
+        else:
+            return ip.is_loopback or ip.is_private or ip.is_link_local
         return "." not in host or host.endswith((".svc", ".cluster.local", ".local", ".localhost"))
     return ip.is_loopback or ip.is_private or ip.is_link_local
 
