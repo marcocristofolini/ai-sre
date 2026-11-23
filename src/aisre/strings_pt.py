@@ -100,3 +100,4 @@ AVISO_PREDITIVO_NAO_INICIADO = "agendador preditivo não iniciado (Prometheus ou
 AVISO_PREDITIVO_FALHOU = "agendador preditivo encerrou com erro ({tipo})"
 AVISO_PREDITIVO_INVESTIGACAO_FALHOU = "falha ao abrir investigação preditiva ({tipo})"
 AVISO_PLACAR_ILEGIVEL = "arquivo do placar ilegível ou inválido ({tipo})"
+AVISO_PREDITIVO_RETRY_FALHOU = "novo backfill preditivo falhou ({tipo}); nova tentativa com espera maior"

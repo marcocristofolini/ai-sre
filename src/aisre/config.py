@@ -51,6 +51,8 @@ class Settings(BaseSettings):
     predict_interval_seconds: float = Field(default=60.0, gt=0)
     predict_backfill_seconds: int = Field(default=7 * 86400, ge=1)
     predict_backfill_step_seconds: int = Field(default=60, ge=1)
+    predict_retry_initial_seconds: float = Field(default=30.0, gt=0)  # 1a espera antes de refazer o backfill
+    predict_retry_max_seconds: float = Field(default=900.0, gt=0)
 
     @field_validator("predict_workloads")
     @classmethod

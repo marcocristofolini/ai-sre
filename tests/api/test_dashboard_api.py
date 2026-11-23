@@ -166,18 +166,67 @@ def test_predictive_normal_point_opens_nothing_and_shows_low_score():
         assert client.get("/incidents").json() == []
 
 
-def test_predictive_stays_learning_with_short_history_and_survives_prometheus_failure():
-    def handler(request):
-        raise httpx.ConnectError("sem rede")
+def test_predictive_recovers_after_prometheus_outage_at_startup():
+    inner = _prom_handler(11.0, [])
+    state = {"down": True, "failed": 0}
 
-    settings = Settings(_env_file=None, **auth_kwargs(**_predict_settings()))
+    def handler(request):
+        if state["down"]:
+            state["failed"] += 1
+            raise httpx.ConnectError("sem rede")
+        return inner(request)
+
+    settings = Settings(_env_file=None, **auth_kwargs(**_predict_settings(
+        predict_retry_initial_seconds=0.02, predict_retry_max_seconds=0.05)))
     app = create_app(settings, MemoryStore(), prometheus_transport=httpx.MockTransport(handler))
     with TestClient(app) as client:
         login(client)
-        time.sleep(0.15)
+        assert _wait(lambda: state["failed"] >= 2)  # tentou de novo, com backoff
         assert client.get("/risk").json() == [
             {"workload": "prod/api", "state": "aprendendo", "score": 0.0, "threshold": 0.6}
         ]
+        state["down"] = False  # Prometheus volta
+        assert _wait(lambda: client.get("/risk").json()[0]["state"] == "ativo")
+        assert _wait(lambda: client.get("/risk").json()[0]["score"] > 0)
+
+
+def test_retry_backoff_is_bounded_and_not_a_storm():
+    import logging
+
+    class Clock:
+        t = 0.0
+
+        def __call__(self):
+            return self.t
+
+    calls = []
+
+    def handler(request):
+        calls.append(request.url.path)
+        raise httpx.ConnectError("x")
+
+    settings = Settings(_env_file=None, **auth_kwargs(**_predict_settings(
+        predict_retry_initial_seconds=10, predict_retry_max_seconds=40)))
+    from aisre.predict.wiring import Predictive
+
+    clock = Clock()
+    p = Predictive(settings, PrometheusTool("http://prom:9090", transport=httpx.MockTransport(handler)),
+                   lambda w, s: None, clock=clock)
+
+    async def run():
+        await p.retry_learning()  # t=0: tenta, próxima em 10
+        await p.retry_learning()  # sem avançar o relógio: não tenta
+        assert len(calls) == 1
+        for expected_wait in (10, 20, 40, 40):
+            clock.t += expected_wait - 0.1
+            await p.retry_learning()
+            n = len(calls)
+            clock.t += 0.1
+            await p.retry_learning()
+            assert len(calls) == n + 1
+            assert p._next_try["prod/api"] - clock.t == expected_wait * (2 if expected_wait < 40 else 1)
+
+    asyncio.run(run())
 
 
 def test_lifespan_cancels_predictive_task_cleanly():

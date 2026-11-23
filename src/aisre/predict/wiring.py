@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from collections.abc import Awaitable, Callable
@@ -36,8 +37,13 @@ class Predictive:
         settings: Settings,
         prometheus: PrometheusTool,
         open_investigation: Callable[[str, float], Awaitable[None]],
+        clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self.settings = settings
+        self._clock = clock
+        # Reintento do backfill para detectores ainda "aprendendo": backoff exponencial limitado.
+        self._next_try: dict[str, float] = {}
+        self._backoff: dict[str, float] = {}
         self.prometheus = prometheus
         self.queries = {w.name: w.query for w in settings.predict_workloads}
         self.detectors: dict[str, ObservedDetector] = {
@@ -53,19 +59,47 @@ class Predictive:
     async def _read_point(self, workload: str) -> np.ndarray:
         return await self.prometheus.query_instant(self.queries[workload])
 
-    async def backfill(self, now: float | None = None) -> None:
+    async def _backfill_one(self, name: str, now: float | None = None) -> None:
         end = time.time() if now is None else now
-        start = end - self.settings.predict_backfill_seconds
-        for name, query in self.queries.items():
-            await backfill_detector(
-                self.detectors[name], self.prometheus, query, start, end,
-                float(self.settings.predict_backfill_step_seconds),
+        await backfill_detector(
+            self.detectors[name], self.prometheus, self.queries[name],
+            end - self.settings.predict_backfill_seconds, end,
+            float(self.settings.predict_backfill_step_seconds),
+        )
+
+    async def backfill(self, now: float | None = None) -> None:
+        for name in self.queries:
+            await self._backfill_one(name, now)
+
+    async def retry_learning(self) -> None:
+        """Refaz o backfill dos detectores ainda "aprendendo" (Prometheus fora do ar no boot,
+        histórico curto). Backoff por workload: dobra a cada falha até o máximo; sem tempestade."""
+        now = self._clock()
+        for name, det in self.detectors.items():
+            if det.state == "ativo":
+                self._next_try.pop(name, None)
+                self._backoff.pop(name, None)
+                continue
+            if now < self._next_try.get(name, 0.0):
+                continue
+            try:
+                await self._backfill_one(name)
+            except Exception as exc:  # um workload não derruba o laço
+                log.warning(t.AVISO_PREDITIVO_RETRY_FALHOU.format(tipo=type(exc).__name__))
+            if det.state == "ativo":
+                continue
+            wait = min(
+                self._backoff.get(name, self.settings.predict_retry_initial_seconds / 2) * 2,
+                self.settings.predict_retry_max_seconds,
             )
+            self._backoff[name], self._next_try[name] = wait, self._clock() + wait
 
     async def run(self) -> None:
-        """Backfill e depois o laço do agendador (cancelável)."""
-        await self.backfill()
-        await self.scheduler.run_forever(self.settings.predict_interval_seconds)
+        """Laço cancelável: tenta o backfill dos que ainda aprendem e avalia os ativos a cada tick."""
+        while True:
+            await self.retry_learning()
+            await self.scheduler.run_once()
+            await asyncio.sleep(self.settings.predict_interval_seconds)
 
     def risk(self) -> list[dict]:
         return [
