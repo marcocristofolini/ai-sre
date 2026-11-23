@@ -5,6 +5,18 @@ Comportamento com entradas degeneradas (documentado, coberto por testes):
   pontos finitos deixa o detector em "aprendendo" (nenhum modelo é mantido).
 - `score` retorna 0.0 enquanto "aprendendo" e para ponto vazio ou não finito
   (sem sinal, nunca dispara); número de features diferente do ajuste levanta ValueError.
+
+Limitações conhecidas do score (Isolation Forest sobre o VALOR, sem tempo):
+- Linha de base plana (série constante): todo ponto, inclusive um muito fora, recebe score
+  constante 0.5 (as árvores não conseguem particionar) e o detector NUNCA dispara com o
+  limiar padrão (0.65).
+- Linha de base com tendência (ex.: rampa linear): pontos além do fim da rampa ficam em
+  torno de 0.65 (medido ~0.649 numa rampa de 1000 pontos; ~0.657 em outras séries), ou seja,
+  exatamente na fronteira do limiar padrão: dispara ou não por acaso.
+- Uma mudança de patamar permanente faria o detector disparar a cada cooldown para sempre;
+  por isso `Predictive.refit_active` reajusta os detectores ativos periodicamente
+  (`AISRE_PREDICT_REFIT_INTERVAL_SECONDS`, padrão 1 dia), mantendo o modelo atual se a
+  leitura falhar ou o histórico for curto.
 """
 
 from __future__ import annotations

@@ -58,6 +58,9 @@ class Settings(BaseSettings):
     predict_backfill_step_seconds: int = Field(default=60, ge=1)
     predict_retry_initial_seconds: float = Field(default=30.0, gt=0)  # 1a espera antes de refazer o backfill
     predict_retry_max_seconds: float = Field(default=900.0, gt=0)
+    # Detector ativo é reajustado (backfill da janela recente) a cada intervalo: depois de uma mudança
+    # de patamar permanente ele aprende o novo normal em vez de abrir investigação a cada cooldown.
+    predict_refit_interval_seconds: float = Field(default=86400.0, gt=0)
 
     @field_validator("predict_workloads")
     @classmethod

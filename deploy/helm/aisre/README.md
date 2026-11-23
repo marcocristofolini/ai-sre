@@ -206,6 +206,10 @@ desenvolvimento**.
 - 1 réplica (limitador de login, deduplicação em andamento e preditivo vivem em memória); estratégia `Recreate`.
 - Sem backup do Postgres, HA ou rotação de segredos no chart.
 - Egress não é restrito pela NetworkPolicy.
+- Preditivo: o detector (Isolation Forest sobre o valor) dá score constante 0.5 para linha de base plana (nunca
+  dispara com o limiar padrão 0.65) e ~0.65 para linha de base com tendência (na fronteira do limiar). Detectores
+  ativos são reajustados a cada `AISRE_PREDICT_REFIT_INTERVAL_SECONDS` (padrão 1 dia; mantém o modelo se a leitura
+  falhar), para que uma mudança de patamar permanente não abra investigação a cada cooldown.
 - O Postgres roda com `readOnlyRootFilesystem: false` (emptyDirs montados em `/tmp` e `/var/run/postgresql`).
 - O placar de precisão (`/scoreboard`) mostra "não medido" até haver um `eval/scoreboard.json` no contêiner.
 

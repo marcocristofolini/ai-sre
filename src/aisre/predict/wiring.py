@@ -24,6 +24,12 @@ class ObservedDetector(WorkloadDetector):
     def __init__(self, min_baseline_points: int = 500) -> None:
         super().__init__(min_baseline_points)
         self.last_score = 0.0
+        self.fits = 0  # ajustes que produziram modelo (para saber se um refit funcionou)
+
+    def fit(self, series: np.ndarray) -> None:
+        super().fit(series)
+        if self.state == "ativo":
+            self.fits += 1
 
     def score(self, point: np.ndarray) -> float:
         value = super().score(point)
@@ -44,6 +50,8 @@ class Predictive:
         # Reintento do backfill para detectores ainda "aprendendo": backoff exponencial limitado.
         self._next_try: dict[str, float] = {}
         self._backoff: dict[str, float] = {}
+        # Reajuste periódico dos ativos: próximo horário por workload (relógio injetável).
+        self._next_refit: dict[str, float] = {}
         self.prometheus = prometheus
         self.queries = {w.name: w.query for w in settings.predict_workloads}
         self.detectors: dict[str, ObservedDetector] = {
@@ -79,6 +87,7 @@ class Predictive:
             if det.state == "ativo":
                 self._next_try.pop(name, None)
                 self._backoff.pop(name, None)
+                self._next_refit.setdefault(name, now + self.settings.predict_refit_interval_seconds)
                 continue
             if now < self._next_try.get(name, 0.0):
                 continue
@@ -87,6 +96,7 @@ class Predictive:
             except Exception as exc:  # um workload não derruba o laço
                 log.warning(t.AVISO_PREDITIVO_RETRY_FALHOU.format(tipo=type(exc).__name__))
             if det.state == "ativo":
+                self._next_refit[name] = self._clock() + self.settings.predict_refit_interval_seconds
                 continue
             wait = min(
                 self._backoff.get(name, self.settings.predict_retry_initial_seconds / 2) * 2,
@@ -94,10 +104,34 @@ class Predictive:
             )
             self._backoff[name], self._next_try[name] = wait, self._clock() + wait
 
+    async def refit_active(self) -> None:
+        """Reajusta os detectores ativos cujo intervalo de refit venceu, com o histórico recente.
+
+        Falha de leitura ou histórico insuficiente mantêm o modelo atual (nunca volta a "aprendendo")
+        e uma nova tentativa ocorre depois de `predict_retry_max_seconds`."""
+        now = self._clock()
+        for name, det in self.detectors.items():
+            if det.state != "ativo":
+                continue
+            due = self._next_refit.setdefault(name, now + self.settings.predict_refit_interval_seconds)
+            if now < due:
+                continue
+            before = det.fits
+            try:
+                await self._backfill_one(name)
+            except Exception as exc:  # um workload não derruba o laço
+                log.warning(t.AVISO_PREDITIVO_REFIT_FALHOU.format(tipo=type(exc).__name__))
+            if det.fits > before:
+                self._next_refit[name] = self._clock() + self.settings.predict_refit_interval_seconds
+            else:
+                self._next_refit[name] = self._clock() + self.settings.predict_retry_max_seconds
+
     async def run(self) -> None:
-        """Laço cancelável: tenta o backfill dos que ainda aprendem e avalia os ativos a cada tick."""
+        """Laço cancelável: tenta o backfill dos que ainda aprendem, reajusta os ativos quando vence
+        o intervalo e avalia os ativos a cada tick."""
         while True:
             await self.retry_learning()
+            await self.refit_active()
             await self.scheduler.run_once()
             await asyncio.sleep(self.settings.predict_interval_seconds)
 
