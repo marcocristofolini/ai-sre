@@ -73,10 +73,48 @@ Requer `kind`, `kubectl` e Docker. O harness recusa `KUBECONFIG` vazio e qualque
 `kind-aisre-eval` (`--allow-non-kind` só se você souber o que está fazendo). O JSON traz data, commit, ferramentas
 habilitadas e o resultado de cada cenário. NÃO foi executado no ambiente de desenvolvimento.
 
+Perfil opcional `make eval-full` (`harness/eval-full.sh`, valores em `harness/full/`): instala kube-prometheus-stack,
+Loki e Promtail no mesmo cluster `kind` e liga as ferramentas `prometheus` e `loki`, para que os cenários de
+métricas e logs passem a ser medíveis (`enabled_tools` do placar vem das ferramentas realmente configuradas; o GitHub
+continua ausente). Exige `helm`, rede e as versões dos charts (`KPS_CHART_VERSION`, `LOKI_CHART_VERSION`,
+`PROMTAIL_CHART_VERSION`; nenhuma foi inventada). **Não verificado**: nunca foi executado. `make eval` não muda.
+
 ## Instalação no Kubernetes
 
 Chart Helm em [deploy/helm/aisre](deploy/helm/aisre/README.md) (Secrets, Alertmanager com token, Ingress, NetworkPolicy,
 o que não foi verificado).
+
+## Imagens por digest
+
+O `Dockerfile` usa as bases `node:22-slim` e `python:3.12-slim` só por tag: digests não podem ser resolvidos sem
+rede e nenhum foi inventado. Para fixar por digest: `docker buildx imagetools inspect python:3.12-slim` (copie o
+`Digest: sha256:...`) e use `FROM python:3.12-slim@sha256:<digest>` (idem `node:22-slim`; veja o comentário no
+`Dockerfile`). Faça o mesmo para `postgres.image` no chart se quiser fixar o pgvector.
+
+## CI
+
+`.github/workflows/ci.yml`: Python 3.12/3.13 (`pytest -W error`), Node 22 (`npm ci`, testes, build) e `helm lint` /
+`helm template` / testes de renderização com Helm fixo (`azure/setup-helm`). Permissões `contents: read`, sem
+segredos. **Nunca foi executado** (escrito sem acesso ao GitHub Actions).
+
+## Pendências
+
+Precisam de infraestrutura real (nada disto foi verificado):
+
+- `make eval` e `make eval-full`: cluster `kind`, Docker, `helm` e (para o agente real) um modelo; só então existe
+  placar de precisão.
+- `helm lint`/`helm template`/instalação do chart (os testes de renderização são pulados sem `helm`) e o Ingress novo.
+- Postgres com pgvector (imagem `pgvector/pgvector:0.8.0-pg17`): `AISRE_TEST_DATABASE_URL` para
+  `tests/test_db_postgres.py` (inclui a exclusão do incidente atual na memória) e a migração 0002.
+- Slack real (assinatura, botão de aprovação, `slack.enabled` + Interactivity) e LLM real.
+- Navegador real para o dashboard (os testes usam jsdom) e a primeira execução do CI.
+
+Decisões do dono do projeto:
+
+- Mesclar a branch `feat/ai-sre-v1`; publicar (ou não) `docs/superpowers/` (especificação e plano).
+- Primeiro usuário real e modelo de monetização.
+- Referências visuais (Sherlocks) para o dashboard.
+- Titular do copyright no apêndice da Apache-2.0 (o `LICENSE` é o texto padrão, sem nome preenchido).
 
 ## Documentos
 

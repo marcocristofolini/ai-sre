@@ -39,6 +39,7 @@ prometheus:
 loki:
   url: http://loki.monitoring.svc:3100
 slack:
+  enabled: true          # publica /slack/actions no Ingress (necessário para os botões do Slack)
   channel: C0123456789
   approvers: ["U012ABC"]
 github:
