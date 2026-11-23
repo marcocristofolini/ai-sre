@@ -32,7 +32,7 @@ postgres:
 llm:
   provider: local
   local:
-    url: http://ollama.llm.svc:11434/v1
+    url: http://ollama.llm.svc:11434   # sem /v1: o app acrescenta /v1/chat/completions
     model: llama3.1
 prometheus:
   url: http://prometheus-server.monitoring.svc:80
@@ -181,6 +181,24 @@ receivers:
 `webhook.allowUnauthenticated=true` aceita alertas sem token quando `webhook-token` não existe: **só em
 desenvolvimento**.
 
+## Placar de precisão
+
+O app lê o placar de `AISRE_SCOREBOARD_PATH` (no chart: `/app/eval/scoreboard.json`). Para mostrar o resultado de um
+`make eval` rodado fora do cluster, publique o arquivo num ConfigMap e informe `scoreboard.configMap`:
+
+```bash
+kubectl -n aisre create configmap aisre-scoreboard --from-file=scoreboard.json=eval/scoreboard.json
+helm upgrade aisre deploy/helm/aisre -n aisre --reuse-values --set scoreboard.configMap=aisre-scoreboard
+```
+
+Sem ConfigMap, a página Precisão mostra "Sem medição ainda". O rótulo "cenários sintéticos" é sempre fixo.
+
+## Aprovações
+
+O botão Aprovar só registra a aprovação; nada é executado. No Slack, só os IDs de `slack.approvers` aprovam.
+No dashboard, o admin local (`auth.adminUser`) pode aprovar **independentemente** de `slack.approvers` (registrado como
+`web:<usuário>`).
+
 ## Segurança
 
 - Somente leitura: o `ClusterRole` tem apenas `get`, `list`, `watch` em `pods`, `nodes` e `events` (exatamente o que a
@@ -211,7 +229,7 @@ desenvolvimento**.
   ativos são reajustados a cada `AISRE_PREDICT_REFIT_INTERVAL_SECONDS` (padrão 1 dia; mantém o modelo se a leitura
   falhar), para que uma mudança de patamar permanente não abra investigação a cada cooldown.
 - O Postgres roda com `readOnlyRootFilesystem: false` (emptyDirs montados em `/tmp` e `/var/run/postgresql`).
-- O placar de precisão (`/scoreboard`) mostra "não medido" até haver um `eval/scoreboard.json` no contêiner.
+- O placar de precisão (`/scoreboard`) mostra "Sem medição ainda" até haver um placar no contêiner (veja abaixo).
 
 ## O que NÃO foi verificado
 

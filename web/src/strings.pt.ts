@@ -69,6 +69,7 @@ export const S = {
     taxaAcerto: "Taxa de acerto",
     errosInjecao: (n: number) => `${n} cenário(s) com erro de injeção`,
     aviso: "Medida em cenários sintéticos de falha injetada, não em produção.",
+    rotulo: "cenários sintéticos", // fixo: igual a ROTULO_CENARIOS_SINTETICOS (strings_pt.py), nunca vem do arquivo
     naoMediveis: (n: number) => `${n} cenário(s) não medível(is) neste ambiente (fora do total)`,
     medidoEm: "Medido em",
     commit: "Commit",

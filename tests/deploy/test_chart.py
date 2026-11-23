@@ -312,6 +312,17 @@ def test_readme_documents_required_topics():
     assert "está sem autenticação" not in readme  # afirmação antiga, não vale mais
 
 
+def test_scoreboard_configmap_is_optional_and_mounted_read_only():
+    assert _values()["scoreboard"]["configMap"] == ""
+    dep = (TEMPLATES / "deployment.yaml").read_text(encoding="utf-8")
+    assert "with .Values.scoreboard.configMap" in dep and "mountPath: /app/eval" in dep and "readOnly: true" in dep
+    cm = (TEMPLATES / "configmap.yaml").read_text(encoding="utf-8")
+    assert 'AISRE_SCOREBOARD_PATH: "/app/eval/scoreboard.json"' in cm and '"AISRE_SCOREBOARD_PATH"' in cm
+    readme = (CHART / "README.md").read_text(encoding="utf-8")
+    assert "Sem medição ainda" in readme and "não medido" not in readme
+    assert "independentemente" in readme and "slack.approvers" in readme
+
+
 def test_forwarded_allow_ips_value_is_restrictive_and_wired():
     v = _values()
     assert v["proxy"]["forwardedAllowIps"] == "127.0.0.1"

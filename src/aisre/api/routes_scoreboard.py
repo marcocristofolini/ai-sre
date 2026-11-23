@@ -34,4 +34,5 @@ async def get_scoreboard(request: Request):
         return {"measured": False, "reason": "invalid"}
     if board.total < 0 or not 0 <= board.correct <= board.total:
         return {"measured": False, "reason": "invalid"}
-    return {"measured": True, **board.model_dump()}
+    # O rótulo é fixo: o arquivo não pode apresentar a medição como se fosse de produção.
+    return {"measured": True, **board.model_dump(), "label": t.ROTULO_CENARIOS_SINTETICOS}

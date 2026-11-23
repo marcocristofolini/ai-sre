@@ -74,3 +74,34 @@ def test_local_provider_error_has_no_body():
         assert "segredo-no-corpo" not in str(exc)
     else:
         raise AssertionError("deveria falhar")
+
+
+# --- I11: endpoint local não passa por proxy do ambiente ---------------------------------------
+
+
+import pytest as _pytest  # noqa: E402
+
+
+@_pytest.mark.parametrize("url,trust", [("http://ollama.llm.svc:11434", False), ("http://127.0.0.1:8000", False),
+                                         ("https://gateway.example.com", True)])
+def test_local_provider_ignores_env_proxy_only_for_local_urls(monkeypatch, url, trust):
+    import asyncio as _asyncio
+
+    import httpx as _httpx
+
+    from aisre.llm.local_provider import LocalProvider
+
+    seen = {}
+    real = _httpx.AsyncClient
+
+    def capture(*args, **kwargs):
+        seen.update(kwargs)
+        return real(*args, **kwargs)
+
+    monkeypatch.setenv("HTTPS_PROXY", "http://proxy.externo.example:3128")
+    monkeypatch.setenv("HTTP_PROXY", "http://proxy.externo.example:3128")
+    monkeypatch.setattr(_httpx, "AsyncClient", capture)
+    transport = _httpx.MockTransport(lambda r: _httpx.Response(200, json={"choices": [{"message": {"content": "ok"}}]}))
+    provider = LocalProvider(url, "m", transport=transport)
+    _asyncio.run(provider.complete([], []))
+    assert seen["trust_env"] is trust

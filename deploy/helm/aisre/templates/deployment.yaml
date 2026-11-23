@@ -114,9 +114,22 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
+            {{- with .Values.scoreboard.configMap }}
+            - name: scoreboard
+              mountPath: /app/eval
+              readOnly: true
+            {{- end }}
       volumes:
         - name: tmp
           emptyDir: {}
+        {{- with .Values.scoreboard.configMap }}
+        - name: scoreboard
+          configMap:
+            name: {{ . }}
+            items:
+              - key: scoreboard.json
+                path: scoreboard.json
+        {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

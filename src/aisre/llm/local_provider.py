@@ -61,6 +61,9 @@ class LocalProvider:
     ) -> None:
         # O destino real decide: um gateway hospedado exige consentimento.
         self.is_external = not is_local_url(base_url)
+        # Endpoint local: ignora HTTP(S)_PROXY/ALL_PROXY do ambiente, senão os dados do incidente
+        # sairiam por um proxy externo apesar de o destino ser considerado local (sem consentimento).
+        self._trust_env = self.is_external
         self._url = base_url.rstrip("/") + "/v1/chat/completions"
         self._model = model
         self._headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
@@ -82,7 +85,9 @@ class LocalProvider:
                 for x in tools
             ]
         try:
-            async with httpx.AsyncClient(timeout=self._timeout, transport=self._transport) as http:
+            async with httpx.AsyncClient(
+                timeout=self._timeout, transport=self._transport, trust_env=self._trust_env
+            ) as http:
                 resp = await http.post(self._url, json=body, headers=self._headers)
                 resp.raise_for_status()
                 msg = resp.json()["choices"][0]["message"]

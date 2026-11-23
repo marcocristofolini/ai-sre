@@ -22,7 +22,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8"]
+dev = ["pytest>=8", "pyyaml>=6"]  # PyYAML: testes estáticos do chart e do harness
 
 [tool.setuptools.package-data]
 aisre = ["migrations/*.sql"]

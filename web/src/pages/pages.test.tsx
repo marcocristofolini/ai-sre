@@ -78,6 +78,17 @@ test("Precisao mostra cenarios nao mediveis com motivo e a procedencia do placar
   expect(screen.getByText("kubernetes")).toBeInTheDocument();
 });
 
+test("Precisao sempre mostra o rotulo fixo de cenarios sinteticos, nunca o do arquivo", async () => {
+  mockApi({
+    ...ME,
+    "GET /scoreboard": { measured: true, correct: 7, total: 7, model: "m", injection_errors: 0, label: "produção real", calibration: [] },
+  });
+  window.location.hash = "#/precisao";
+  render(<App />);
+  expect(await screen.findByText("cenários sintéticos")).toBeInTheDocument();
+  expect(screen.queryByText("produção real")).not.toBeInTheDocument();
+});
+
 test("Precisao sem medicao mostra 'sem medicao ainda' e nenhum numero", async () => {
   mockApi({ ...ME, "GET /scoreboard": { measured: false, reason: "missing" } });
   window.location.hash = "#/precisao";

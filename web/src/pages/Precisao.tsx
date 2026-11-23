@@ -20,7 +20,7 @@ export function Precisao() {
               <div className="card">
                 <p className="muted">{S.precisao.aviso}</p>
                 <p>
-                  <span className="tag">{board.label}</span>
+                  <span className="tag">{S.precisao.rotulo}</span>
                 </p>
                 <dl className="facts">
                   <dt>{S.precisao.corretos}</dt>

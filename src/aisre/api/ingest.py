@@ -79,6 +79,9 @@ async def run_investigation(
         await _record_failure(
             store, incident_id, t.ERRO_INVESTIGACAO_FALHOU.format(tipo=type(exc).__name__)
         )
+        # O RCA não foi salvo: não publica no Slack (o botão Aprovar apontaria para um RCA
+        # inexistente) nem grava na memória.
+        return
     if not rca.unknown:
         try:
             await memory.save(incident_id, rca)

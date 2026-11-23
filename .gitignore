@@ -6,3 +6,5 @@ node_modules/
 eval/
 web/node_modules/
 web/dist/
+.env
+.env.*

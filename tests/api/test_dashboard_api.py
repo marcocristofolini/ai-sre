@@ -58,6 +58,13 @@ def test_scoreboard_invalid_file_is_not_measured(tmp_path, content):
     assert client.get("/scoreboard").json() == {"measured": False, "reason": "invalid"}
 
 
+def test_scoreboard_label_is_always_the_synthetic_constant(tmp_path):
+    path = tmp_path / "s.json"
+    path.write_text('{"correct": 7, "total": 7, "model": "m", "label": "produção real"}')
+    client, _ = _client(scoreboard_path=str(path))
+    assert client.get("/scoreboard").json()["label"] == "cenários sintéticos"
+
+
 def test_old_scoreboard_file_without_calibration_still_loads(tmp_path):
     path = tmp_path / "s.json"
     path.write_text('{"correct": 1, "total": 2, "model": "m", "injection_errors": 0, "label": "cenários sintéticos"}')

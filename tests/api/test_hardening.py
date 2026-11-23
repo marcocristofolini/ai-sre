@@ -245,3 +245,26 @@ def test_run_investigation_never_raises_when_store_fails(caplog):
 
     asyncio.run(run())
     assert "segredo-db" not in caplog.text
+
+
+def test_hooks_and_memory_are_skipped_when_storing_the_rca_fails():
+    class CompleteFails(MemoryStore):
+        async def complete(self, incident_id, rca):
+            raise RuntimeError("db down")
+
+    store = CompleteFails()
+    hooked = []
+
+    async def hook(incident_id, rca):
+        hooked.append(incident_id)
+
+    async def run():
+        inc, _ = await store.create_if_new(Alert(name="X", labels={}, fired_at=datetime.now(UTC)), 300)
+        memory = Memory(store)
+        await run_investigation(inc.id, Alert(name="X", labels={}, fired_at=datetime.now(UTC)), store,
+                                Fake(), memory, 10, extra_hooks=[hook])
+        return inc.id, await store.get(inc.id), await store.nearest([0.0] * 8, 5)
+
+    inc_id, got, mems = asyncio.run(run())
+    assert hooked == []  # nada publicado no Slack para um RCA que não foi salvo
+    assert got.status == "failed" and mems == []
