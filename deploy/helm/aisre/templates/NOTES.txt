@@ -24,6 +24,11 @@ AVISO: llm.provider=anthropic com llm.externalConsent=false.
 
 AVISO: llm.provider=local sem llm.local.url: as investigações vão falhar até você informar o endpoint.
 {{- end }}
+{{- if and (eq .Values.llm.provider "local") (not .Values.llm.local.model) }}
+
+AVISO: llm.provider=local sem llm.local.model: nenhum modelo é definido (AISRE_LLM_MODEL não é emitido) e o
+endpoint local receberia o modelo padrão do app, que não existe nele. Informe llm.local.model.
+{{- end }}
 {{- if and (eq .Values.llm.provider "local") .Values.llm.local.url (not .Values.llm.externalConsent) }}
 
 Observação: se llm.local.url apontar para fora do cluster/rede privada, o app o trata como externo

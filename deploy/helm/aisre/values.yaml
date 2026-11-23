@@ -35,7 +35,7 @@ llm:
     model: claude-sonnet-5-5
   local:
     url: ""                # endpoint compatível com OpenAI, ex.: http://ollama.llm.svc:11434/v1
-    model: ""
+    model: ""              # obrigatório na prática com provider=local (vazio: AISRE_LLM_MODEL não é emitido)
 
 slack:
   channel: ""
@@ -60,7 +60,9 @@ predict:
   # Lista de {name: "namespace/workload", query: "PromQL que devolve UMA série"}. Vazio = preditivo desligado.
   workloads: []
 
-# Variáveis AISRE_* adicionais (somente não secretas), ex.: {AISRE_DEDUPE_WINDOW_SECONDS: "600"}
+# Variáveis adicionais NÃO secretas, ex.: {AISRE_DEDUPE_WINDOW_SECONDS: "600"}. O chart FALHA se a chave
+# for uma variável gerenciada pelos valores dedicados (ex.: AISRE_LLM_EXTERNAL_CONSENT) ou parecer segredo
+# (TOKEN, SECRET, PASSWORD, KEY, HASH). Segredos só via Secret existente.
 extraEnv: {}
 
 service:

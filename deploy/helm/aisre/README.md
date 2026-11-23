@@ -113,6 +113,13 @@ apenas avisa nas notas pós-instalação). Para autorizar: `--set llm.externalCo
 do incidente (com redação de segredos) será enviado ao provedor. Um endpoint `llm.local.url` fora do cluster/rede
 privada também é tratado como externo. Para manter tudo no cluster, use `llm.provider=local` com um endpoint interno.
 
+## extraEnv
+
+`extraEnv` adiciona variáveis não secretas ao ConfigMap. O chart falha na renderização se a chave for uma variável
+já gerenciada por valores dedicados (por exemplo `AISRE_LLM_EXTERNAL_CONSENT`, que só pode ser mudada por
+`llm.externalConsent`) ou se o nome contiver `TOKEN`, `SECRET`, `PASSWORD`, `KEY` ou `HASH`. Com `llm.provider=local`,
+informe `llm.local.model` (se vazio, `AISRE_LLM_MODEL` não é emitido e as notas avisam).
+
 ## Acesso ao dashboard
 
 ```bash

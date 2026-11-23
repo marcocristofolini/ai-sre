@@ -203,8 +203,40 @@ def test_security_context_hardened_in_defaults_and_templates():
 
 def test_probes_use_healthz():
     text = (TEMPLATES / "deployment.yaml").read_text(encoding="utf-8")
-    assert "livenessProbe" in text and "readinessProbe" in text
-    assert text.count("/healthz") >= 2
+    for probe in ("livenessProbe", "readinessProbe"):
+        m = re.search(rf"^\s*{probe}:\n\s*httpGet:\n\s*path: /healthz\n\s*port: http\n", text, flags=re.M)
+        assert m, probe
+    # a porta nomeada "http" existe e é a 8000 em que o uvicorn escuta
+    assert re.search(r"- name: http\n\s*containerPort: 8000", text)
+
+
+def test_configmap_encodes_list_fields_as_json():
+    cm = (TEMPLATES / "configmap.yaml").read_text(encoding="utf-8")
+    assert re.search(r"AISRE_SLACK_APPROVERS:\s*\{\{\s*\.Values\.slack\.approvers\s*\|\s*toJson\s*\|\s*quote\s*\}\}", cm)
+    assert re.search(r"AISRE_PREDICT_WORKLOADS:\s*\{\{\s*\.Values\.predict\.workloads\s*\|\s*toJson\s*\|\s*quote\s*\}\}", cm)
+    v = _values()
+    assert isinstance(v["slack"]["approvers"], list) and isinstance(v["predict"]["workloads"], list)
+
+
+def test_local_model_is_only_emitted_when_set_and_notes_warn():
+    cm = (TEMPLATES / "configmap.yaml").read_text(encoding="utf-8")
+    assert re.search(r"with \.Values\.llm\.local\.model\s*\}\}\s*AISRE_LLM_MODEL:\s*\{\{\s*\.\s*\|\s*quote", cm)
+    assert "AISRE_LLM_MODEL: {{ .Values.llm.local.model" not in cm
+    notes = (TEMPLATES / "NOTES.txt").read_text(encoding="utf-8")
+    assert re.search(r'eq \.Values\.llm\.provider "local"\) \(not \.Values\.llm\.local\.model', notes)
+
+
+def test_extra_env_guard_rejects_managed_and_secret_like_keys():
+    cm = (TEMPLATES / "configmap.yaml").read_text(encoding="utf-8")
+    assert re.search(r"has \$k \$managed\s*\}\}\{\{\s*fail", cm)
+    assert re.search(r'regexMatch "\(\?i\)\(TOKEN\|SECRET\|PASSWORD\|KEY\|HASH\)" \$k\s*\}\}\{\{\s*fail', cm)
+    guard = set(re.findall(r'"(AISRE_[A-Z_]+)"', cm))
+    set_keys = set(re.findall(r"^\s*(AISRE_[A-Z_]+):", cm, flags=re.M))
+    dep = (TEMPLATES / "deployment.yaml").read_text(encoding="utf-8")
+    env_keys = set(re.findall(r"name:\s*(AISRE_[A-Z_]+)", dep))
+    assert set_keys <= guard and env_keys <= guard
+    assert "AISRE_LLM_EXTERNAL_CONSENT" in guard
+    assert "extraEnv" in (CHART / "values.yaml").read_text(encoding="utf-8")
 
 
 def test_ingress_and_networkpolicy_off_by_default_and_ingress_gated():
@@ -238,7 +270,7 @@ def test_every_aisre_env_var_is_a_real_setting():
 def test_secret_env_vars_come_from_secret_refs_not_configmap():
     cm = (TEMPLATES / "configmap.yaml").read_text(encoding="utf-8")
     for s in ("LLM_API_KEY", "SLACK_BOT_TOKEN", "SLACK_SIGNING_SECRET", "GITHUB_TOKEN", "ADMIN_PASSWORD_HASH", "SESSION_SECRET", "DATABASE_URL"):
-        assert f"AISRE_{s}" not in cm, s
+        assert not re.search(rf"^\s*AISRE_{s}:", cm, flags=re.M), s
     dep = (TEMPLATES / "deployment.yaml").read_text(encoding="utf-8")
     assert dep.count("secretKeyRef") >= 6
 
@@ -320,3 +352,22 @@ def test_rendered_secret_only_from_user_values():
 def test_rendered_external_db_skips_statefulset():
     docs = _render("--set", "postgres.enabled=false", "--set", "postgres.external.existingSecret=ext-db")
     assert not [d for d in docs if d["kind"] == "StatefulSet"]
+
+
+@needs_helm
+def test_rendered_extra_env_guard_fails():
+    for bad in ("AISRE_LLM_EXTERNAL_CONSENT", "MY_API_TOKEN"):
+        r = subprocess.run(
+            [HELM, "template", "aisre", str(CHART), *MIN_ARGS, "--set-string", f"extraEnv.{bad}=x"],
+            capture_output=True, text=True, timeout=60,
+        )
+        assert r.returncode != 0, bad
+
+
+@needs_helm
+def test_rendered_lists_are_json_and_local_model_omitted_when_empty():
+    docs = _render("--set", "slack.approvers={U1}")
+    cm = next(d for d in docs if d["kind"] == "ConfigMap")
+    assert cm["data"]["AISRE_SLACK_APPROVERS"] == '["U1"]'
+    assert cm["data"]["AISRE_PREDICT_WORKLOADS"] == "[]"
+    assert "AISRE_LLM_MODEL" not in cm["data"]
