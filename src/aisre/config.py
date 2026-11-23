@@ -6,7 +6,9 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="AISRE_", env_file=".env", extra="ignore")
 
     llm_provider: str = ""
-    llm_api_key: str = ""
+    llm_api_key: SecretStr | None = None
+    llm_model: str = "claude-sonnet-5-5"
+    llm_base_url: str = ""
     llm_external_consent: bool = False
     database_url: str = ""
     prometheus_url: str = ""

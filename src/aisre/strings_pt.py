@@ -14,3 +14,14 @@ ERRO_FERRAMENTA_FALHA = "Falha ao consultar o backend: {detalhe}"
 ERRO_FERRAMENTA_ARGUMENTO = "Argumento obrigatório ausente: {nome}"
 ERRO_FERRAMENTA_TIPO_K8S = "Tipo de recurso Kubernetes não suportado: {tipo}"
 AVISO_SAIDA_TRUNCADA = "\n[... saída truncada em {limite} caracteres ...]"
+
+# LLM, consentimento e redação
+MARCADOR_REDIGIDO = "[REDIGIDO]"
+ERRO_CONSENTIMENTO_LLM = (
+    "Este provedor de LLM é externo e os dados do incidente sairiam do seu ambiente. "
+    "Defina AISRE_LLM_EXTERNAL_CONSENT=true para consentir explicitamente, ou use um provedor local."
+)
+ERRO_LLM_PROVEDOR_DESCONHECIDO = "Provedor de LLM não suportado: {nome}"
+ERRO_LLM_SEM_CHAVE = "Provedor externo exige AISRE_LLM_API_KEY."
+ERRO_LLM_SEM_URL_LOCAL = "Provedor local exige AISRE_LLM_BASE_URL."
+ERRO_LLM_FALHA = "Falha ao chamar o provedor de LLM ({detalhe})."
