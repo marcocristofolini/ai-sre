@@ -1,0 +1,39 @@
+AI SRE instalado: {{ include "aisre.fullname" . }} (namespace {{ .Release.Namespace }}).
+
+Acesso ao dashboard (sem Ingress):
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "aisre.fullname" . }} 8080:{{ .Values.service.port }}
+  Abra http://localhost:8080 e entre com o usuário "{{ .Values.auth.adminUser }}".
+{{- if .Values.auth.cookieSecure }}
+  AVISO: auth.cookieSecure=true; via http (port-forward) o navegador não guarda o cookie de sessão.
+  Para um teste local use --set auth.cookieSecure=false (nunca em produção).
+{{- end }}
+
+Alerta de teste (Alertmanager/webhook):
+  curl -X POST http://localhost:8080/alerts/webhook -H 'Content-Type: application/json' \
+    -d '{"alerts":[{"status":"firing","labels":{"alertname":"TesteAlerta","namespace":"default"},"startsAt":"2026-01-01T00:00:00Z"}]}'
+
+{{- if and (eq .Values.llm.provider "anthropic") (not .Values.llm.externalConsent) }}
+
+AVISO: llm.provider=anthropic com llm.externalConsent=false.
+  O provedor Anthropic é externo: sem consentimento, NENHUM dado sai do cluster e as
+  investigações serão recusadas (o incidente fica com erro de consentimento).
+  Para autorizar o envio de dados ao LLM externo, defina explicitamente --set llm.externalConsent=true.
+  Para manter tudo dentro do cluster, use llm.provider=local com llm.local.url.
+{{- end }}
+{{- if and (eq .Values.llm.provider "local") (not .Values.llm.local.url) }}
+
+AVISO: llm.provider=local sem llm.local.url: as investigações vão falhar até você informar o endpoint.
+{{- end }}
+{{- if and (eq .Values.llm.provider "local") .Values.llm.local.url (not .Values.llm.externalConsent) }}
+
+Observação: se llm.local.url apontar para fora do cluster/rede privada, o app o trata como externo
+e também exige llm.externalConsent=true.
+{{- end }}
+
+SEGURANÇA: /alerts/webhook NÃO tem autenticação na v1. Não o exponha publicamente; use
+networkPolicy.enabled=true com networkPolicy.ingressFrom (ex.: só o Alertmanager) ou restrinja o Ingress.
+{{- if not .Values.networkPolicy.enabled }}
+  (networkPolicy.enabled=false: qualquer pod do cluster alcança o webhook.)
+{{- end }}
+O produto só sugere comandos e registra aprovações; nada é executado. O RBAC é somente leitura (get/list/watch
+em pods, nodes e events).

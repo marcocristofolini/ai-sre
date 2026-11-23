@@ -1,0 +1,6 @@
+apiVersion: v2
+name: aisre
+description: AI SRE - análise de causa raiz de incidentes com evidências (API, dashboard e Postgres+pgvector)
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

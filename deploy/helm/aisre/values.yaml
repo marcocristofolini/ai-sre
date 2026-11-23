@@ -1,0 +1,156 @@
+# Valores padrão do chart aisre. NENHUM segredo tem valor padrão: use Secrets existentes (veja README).
+
+image:
+  repository: aisre
+  tag: ""            # vazio = appVersion do Chart. Nunca use "latest".
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+
+replicaCount: 1      # v1: 1 réplica (limitador de login e preditivo vivem em memória)
+
+# Segredos da aplicação. Chaves esperadas no Secret (todas opcionais, exceto as duas primeiras):
+#   admin-password-hash  hash scrypt da senha do admin   (python -m aisre.auth hash)
+#   session-secret       segredo da sessão               (python -m aisre.auth secret)
+#   llm-api-key          chave do provedor LLM (anthropic; opcional para local)
+#   slack-bot-token      token do bot do Slack
+#   slack-signing-secret segredo de assinatura do Slack
+#   github-token         token somente leitura do GitHub
+secrets:
+  existingSecret: ""   # nome de um Secret já existente no namespace (recomendado)
+  create: false        # true = o chart cria o Secret, SOMENTE com os valores abaixo que você informar
+  values:              # nunca versione valores reais; prefira --set-file/--set na linha de comando
+    adminPasswordHash: ""
+    sessionSecret: ""
+    llmApiKey: ""
+    slackBotToken: ""
+    slackSigningSecret: ""
+    githubToken: ""
+
+llm:
+  provider: local          # anthropic | local
+  # Consentimento para enviar dados a um LLM EXTERNO. Falso: com provider=anthropic (ou um
+  # endpoint local fora do cluster) as investigações são recusadas, nada sai do cluster.
+  externalConsent: false
+  anthropic:
+    model: claude-sonnet-5-5
+  local:
+    url: ""                # endpoint compatível com OpenAI, ex.: http://ollama.llm.svc:11434/v1
+    model: ""
+
+slack:
+  channel: ""
+  approvers: []            # IDs de usuário do Slack autorizados a aprovar (ex.: ["U012ABC"])
+
+prometheus:
+  url: ""
+loki:
+  url: ""
+github:
+  repo: ""                 # owner/repo; o token vem do Secret (github-token)
+
+kubernetes:
+  enabled: true            # liga a ferramenta kubernetes e o RBAC somente leitura
+
+auth:
+  adminUser: admin
+  cookieSecure: true       # false só em testes via port-forward (http)
+  sessionTtlSeconds: 28800
+
+predict:
+  # Lista de {name: "namespace/workload", query: "PromQL que devolve UMA série"}. Vazio = preditivo desligado.
+  workloads: []
+
+# Variáveis AISRE_* adicionais (somente não secretas), ex.: {AISRE_DEDUPE_WINDOW_SECONDS: "600"}
+extraEnv: {}
+
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: aisre.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+  # Não exponha /alerts/webhook publicamente (sem autenticação na v1); restrinja por path/origem.
+
+serviceAccount:
+  create: true
+  name: ""
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  fsGroup: 10001
+  seccompProfile:
+    type: RuntimeDefault
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  capabilities:
+    drop: ["ALL"]
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: "1"
+    memory: 1Gi
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+podAnnotations: {}
+
+# NetworkPolicy opcional. Com enabled=true: o app só aceita entrada dos peers em ingressFrom
+# (lista vazia = nenhuma entrada) e o Postgres só aceita o app. Egress não é restrito.
+networkPolicy:
+  enabled: false
+  ingressFrom: []          # peers do NetworkPolicy, ex.: [{namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: monitoring}}}]
+
+postgres:
+  enabled: true            # false = usa banco externo (external.*)
+  image:
+    repository: pgvector/pgvector
+    tag: 0.8.0-pg17
+    pullPolicy: IfNotPresent
+  auth:
+    username: aisre
+    database: aisre
+    existingSecret: ""     # Secret com a senha do usuário (use senha só com [A-Za-z0-9_-])
+    passwordKey: postgres-password
+  persistence:
+    size: 10Gi
+    storageClass: ""
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 999
+    runAsGroup: 999
+    fsGroup: 999
+    seccompProfile:
+      type: RuntimeDefault
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: false   # a imagem oficial grava em /var/run/postgresql e /tmp (emptyDirs montados)
+    runAsNonRoot: true
+    capabilities:
+      drop: ["ALL"]
+  external:
+    existingSecret: ""     # Secret com a URL completa do banco
+    urlKey: database-url
+    url: ""                # alternativa: o chart guarda a URL num Secret próprio (contém credenciais!)
