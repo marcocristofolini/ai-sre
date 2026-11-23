@@ -5,3 +5,4 @@ ERRO_DESCONHECIDO_COM_CAUSA = "Uma análise marcada como desconhecida não pode 
 ERRO_SEM_CAUSA_NAO_DESCONHECIDO = (
     "Sem causa, a análise deve ser marcada como desconhecida."
 )
+ROTULO_CENARIOS_SINTETICOS = "cenários sintéticos"
