@@ -15,6 +15,7 @@ class Scoreboard(BaseModel):
     correct: int
     total: int
     model: str
+    injection_errors: int = 0
     label: str = t.ROTULO_CENARIOS_SINTETICOS
 
 
@@ -45,7 +46,12 @@ def calibration(
     ]
 
 
-def scoreboard(results: list[GradedResult], model: str) -> Scoreboard:
+def scoreboard(
+    results: list[GradedResult], model: str, injection_errors: int = 0
+) -> Scoreboard:
     return Scoreboard(
-        correct=sum(1 for r in results if r.correct), total=len(results), model=model
+        correct=sum(1 for r in results if r.correct),
+        total=len(results),
+        model=model,
+        injection_errors=injection_errors,
     )

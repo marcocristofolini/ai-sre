@@ -37,6 +37,6 @@ SCENARIOS: list[Scenario] = [
         id="dns-failure",
         fault="dns-break",
         expected_cause="Falha de resolução DNS",
-        expected_evidence_refs=["log:coredns/errors", "metric:coredns_dns_responses_total"],
+        expected_evidence_refs=["log:dns-client/dns-error", "k8s:pod/dns-client/dnsConfig"],
     ),
 ]

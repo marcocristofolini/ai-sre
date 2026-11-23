@@ -68,17 +68,48 @@ def test_run_all_cleans_up_when_inject_succeeds_but_grading_input_invalid():
     assert len(calls["cleanup"]) == len(SCENARIOS)
 
 
-def test_inject_failure_counts_incorrect_and_continues():
-    calls = {"cleanup": []}
+def test_inject_failure_is_recorded_cleaned_up_and_run_continues():
+    cleaned = []
 
     def inject(scenario, kubeconfig):
         raise RuntimeError("kubectl falhou")
 
-    board = run_all(
-        _unknown, "m", inject=inject, cleanup=lambda h: calls["cleanup"].append(h)
-    )
+    board = run_all(_unknown, "m", inject=inject, cleanup=cleaned.append)
     assert (board.correct, board.total) == (0, len(SCENARIOS))
-    assert calls["cleanup"] == []
+    assert board.injection_errors == len(SCENARIOS)
+    assert [h.scenario_id for h in cleaned] == [s.id for s in SCENARIOS]
+
+
+def test_cleanup_exception_does_not_abort_run():
+    _, inject, _ = _fakes()
+
+    def bad_cleanup(handle):
+        raise RuntimeError("delete falhou")
+
+    board = run_all(_unknown, "m", inject=inject, cleanup=bad_cleanup)
+    assert board.total == len(SCENARIOS)
+    assert board.injection_errors == 0
+
+
+def test_main_exits_nonzero_when_injection_fails(tmp_path, monkeypatch):
+    from aisre.harness import runner
+
+    def failing_inject(scenario, kubeconfig):
+        raise RuntimeError("sem cluster")
+
+    monkeypatch.setattr(runner, "inject", failing_inject)
+    monkeypatch.setattr(runner, "cleanup", lambda h: None)
+    # defaults de run_all foram capturados na definicao; reconstroi via partial
+    import functools
+
+    monkeypatch.setattr(
+        runner,
+        "run_all",
+        functools.partial(runner.run_all, inject=failing_inject, cleanup=lambda h: None),
+    )
+    out = tmp_path / "sb.json"
+    assert runner.main([str(out)]) == 1
+    assert out.is_file()
 
 
 def test_manifest_exists_for_every_scenario():

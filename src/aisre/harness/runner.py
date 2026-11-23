@@ -50,7 +50,8 @@ def cleanup(handle: InjectionHandle) -> None:
         "-f",
         str(path),
         "--ignore-not-found",
-        "--wait=false",
+        "--wait=true",
+        "--timeout=120s",
     )
 
 
@@ -64,28 +65,37 @@ def run_all(
     cleanup: Callable[[InjectionHandle], None] = cleanup,
 ) -> Scoreboard:
     results: list[GradedResult] = []
+    injection_errors = 0
+
+    def _safe_cleanup(handle: InjectionHandle) -> None:
+        try:
+            cleanup(handle)
+        except Exception as exc:
+            print(f"aviso: cleanup de {handle.scenario_id} falhou: {exc}", file=sys.stderr)
+
     for scenario in SCENARIOS if scenarios is None else scenarios:
+        handle = InjectionHandle(scenario_id=scenario.id, kubeconfig=kubeconfig)
         try:
             handle = inject(scenario, kubeconfig)
-        except Exception:
+        except Exception as exc:
+            injection_errors += 1
+            print(f"erro: injecao de {scenario.id} falhou: {exc}", file=sys.stderr)
+            _safe_cleanup(handle)  # o apply pode ter criado recursos parciais
             results.append(GradedResult(scenario_id=scenario.id, correct=False, confidence=0.0))
             continue
         try:
-            try:
-                rca = investigate(scenario)
-                result = GradedResult(
-                    scenario_id=scenario.id,
-                    correct=grade(rca, scenario),
-                    confidence=rca.confidence,
-                )
-            except Exception:
-                result = GradedResult(
-                    scenario_id=scenario.id, correct=False, confidence=0.0
-                )
+            rca = investigate(scenario)
+            result = GradedResult(
+                scenario_id=scenario.id,
+                correct=grade(rca, scenario),
+                confidence=rca.confidence,
+            )
+        except Exception:
+            result = GradedResult(scenario_id=scenario.id, correct=False, confidence=0.0)
         finally:
-            cleanup(handle)
+            _safe_cleanup(handle)
         results.append(result)
-    return scoreboard(results, model)
+    return scoreboard(results, model, injection_errors)
 
 
 def _unknown_investigate(_scenario: Scenario) -> RCA:
@@ -102,7 +112,7 @@ def main(argv: list[str]) -> int:
     )
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(board.model_dump(), ensure_ascii=False, indent=2) + "\n")
-    return 0
+    return 1 if board.injection_errors else 0
 
 
 if __name__ == "__main__":
