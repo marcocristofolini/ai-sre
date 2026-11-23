@@ -49,4 +49,18 @@ SCENARIOS: list[Scenario] = [
         expected_cause="Falha de resolução DNS",
         expected_evidence_refs=["log:"],
     ),
+    Scenario(
+        id="memory-leak-gradual",
+        namespace="eval-6",
+        fault="slow-memory-growth",
+        expected_cause="Crescimento gradual de memória até o limite do contêiner",
+        expected_evidence_refs=["metric:", "k8s:pod"],
+    ),
+    Scenario(
+        id="latency-creep",
+        namespace="eval-7",
+        fault="slow-latency-growth",
+        expected_cause="Latência crescendo gradualmente sem mudança de código",
+        expected_evidence_refs=["metric:"],
+    ),
 ]

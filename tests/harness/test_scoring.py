@@ -116,6 +116,13 @@ PERFECT_QUERIES = {
     ],
     "node-disk-pressure": [("k8s", {"kind": "nodes"})],
     "dns-failure": [("log", {"query": '{namespace="eval-5"} |= "dns-error"'})],
+    "memory-leak-gradual": [
+        ("metric", {"query": 'container_memory_working_set_bytes{namespace="eval-6"}'}),
+        ("k8s", {"kind": "pod", "namespace": "eval-6", "name": "worker"}),
+    ],
+    "latency-creep": [
+        ("metric", {"query": "histogram_quantile(0.99, rate(http_request_duration_seconds_bucket[5m]))"}),
+    ],
 }
 
 
@@ -144,5 +151,5 @@ def test_scoreboard_declares_model_and_synthetic_label():
 def test_initial_scenarios_declared():
     assert {s.id for s in SCENARIOS} == {
         "oom-kill", "crashloop-bad-config", "bad-deploy-latency",
-        "node-disk-pressure", "dns-failure",
+        "node-disk-pressure", "dns-failure", "memory-leak-gradual", "latency-creep",
     }

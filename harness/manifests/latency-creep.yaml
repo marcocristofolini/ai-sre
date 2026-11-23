@@ -1,0 +1,36 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: eval-7
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: eval-7
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: api}
+  template:
+    metadata:
+      labels: {app: api}
+    spec:
+      containers:
+        - name: api
+          image: python:3.12-alpine
+          command:
+            - python
+            - -c
+            - |
+              import time
+              from http.server import BaseHTTPRequestHandler, HTTPServer
+              delay = [0.0]
+              class H(BaseHTTPRequestHandler):
+                  def do_GET(self):
+                      time.sleep(delay[0])
+                      delay[0] += 0.01  # cada requisicao fica um pouco mais lenta
+                      self.send_response(200); self.end_headers(); self.wfile.write(b"ok")
+              HTTPServer(("", 8080), H).serve_forever()
+          ports:
+            - containerPort: 8080

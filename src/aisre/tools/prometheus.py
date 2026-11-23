@@ -1,7 +1,11 @@
 import httpx
+import numpy as np
 
 from aisre import strings_pt as t
 from aisre.tools.base import ReadOnlyHttpClient, ToolResult, error_result, truncate
+
+# Limite de pontos por consulta do Prometheus (11000).
+MAX_RANGE_POINTS = 11000
 
 
 class PrometheusTool:
@@ -26,3 +30,18 @@ class PrometheusTool:
             return ToolResult(ok=True, data=truncate(resp.text), error=None, ref=ref)
         except Exception as exc:  # nunca propaga
             return error_result(ref, exc)
+
+    async def query_range(self, query: str, start: float, end: float, step: float) -> np.ndarray:
+        """Série numérica (primeira série retornada) para backfill; somente GET.
+
+        Levanta em falha de rede/HTTP; NaN/inf permanecem no array (o detector os descarta)."""
+        if step <= 0 or end < start or (end - start) / step > MAX_RANGE_POINTS:
+            raise ValueError("intervalo/passo inválido para query_range")
+        resp = await self._http.get(
+            f"{self._base}/api/v1/query_range",
+            params={"query": query, "start": start, "end": end, "step": step},
+        )
+        result = resp.json().get("data", {}).get("result", [])
+        if not result:
+            return np.empty(0, dtype=np.float64)
+        return np.array([float(v[1]) for v in result[0].get("values", [])], dtype=np.float64)
