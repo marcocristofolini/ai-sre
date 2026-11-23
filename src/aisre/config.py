@@ -1,4 +1,4 @@
-from pydantic import Field
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -12,3 +12,8 @@ class Settings(BaseSettings):
     prometheus_url: str = ""
     loki_url: str = ""
     slack_approvers: list[str] = Field(default_factory=list)
+    tool_timeout_seconds: int = 10
+    github_token: SecretStr = SecretStr("")
+    github_repo: str = ""
+    github_api_url: str = "https://api.github.com"
+    kubernetes_enabled: bool = False
