@@ -1,5 +1,7 @@
 # Segurança
 
+Licença do projeto: Apache-2.0 (arquivo `LICENSE`). O software é fornecido "como está", sem garantias.
+
 ## Como reportar uma vulnerabilidade
 
 Não abra issue pública para vulnerabilidades. Use o recurso de "Report a vulnerability" (GitHub Security Advisories)

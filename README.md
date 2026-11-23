@@ -16,10 +16,15 @@ aprovação e um módulo preditivo (Isolation Forest sobre métricas do Promethe
   página Precisão mostra "Sem medição ainda" até existir um placar. O placar mede cenários sintéticos de falha
   injetada, não produção, e cenários que exigem ferramentas ausentes (Prometheus, Loki, GitHub não vêm no `kind`)
   aparecem como "não medível neste ambiente", fora do total.
-- **Memória de incidentes é gravada, mas ainda não é usada pelo agente**: RCAs conhecidos são salvos com embedding
-  (pgvector), porém a investigação não consulta incidentes parecidos.
+- **Memória de incidentes é usada pelo agente**: RCAs conclusivos são salvos com embedding local (hashing, sem rede;
+  pgvector no Postgres) e cada investigação recebe os `AISRE_MEMORY_TOP_K` (padrão 3; 0 desativa) incidentes
+  anteriores mais parecidos como contexto **não confiável**: bloco delimitado e redigido como qualquer outro dado,
+  sem id citável (nunca é evidência, não eleva a confiança nem dispensa o "não sei"). Falha na consulta é só
+  registrada (tipo da exceção) e a investigação segue sem ela. O embedding é um hashing de tokens (lexical, não
+  semântico) e não foi avaliado quanto à utilidade. Notas de resolução não são armazenadas; 
+  runbooks: não implementado (fora do escopo da v1).
 - Os testes de integração com Postgres (`tests/test_db_postgres.py`) rodam só com `AISRE_TEST_DATABASE_URL`.
-- Licença: a definir.
+- Licença: Apache-2.0 (veja `LICENSE`).
 
 ## Segurança em uma página
 
