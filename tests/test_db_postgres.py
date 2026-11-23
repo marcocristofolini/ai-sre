@@ -152,3 +152,23 @@ def test_postgres_pool_lifecycle_and_app_lifespan():
         assert r.status_code == 202
     with pytest.raises(PoolClosed):
         asyncio.run(app.state.store.get(1))
+
+
+# Não executado aqui (sem Postgres): exclusão do incidente atual na busca por semelhantes.
+@needs_pg
+def test_postgres_similar_excludes_current_incident():
+    async def run():
+        store = await _store()
+        tag = f"{os.getpid()}-{datetime.now(UTC).timestamp()}"
+        a, _ = await store.create_if_new(_alert("mem-a"), 300)
+        b, _ = await store.create_if_new(_alert("mem-b"), 300)
+        cause = f"vazamento unico {tag}"
+        for inc in (a, b):
+            rca = RCA(cause=cause, confidence=0.7, evidence=[Evidence(kind="log", ref="log:a", summary="x")])
+            await store.complete(inc.id, rca)
+            await Memory(store).save(inc.id, rca)
+        found = await Memory(store).similar(cause, k=1, exclude_incident_id=a.id)
+        assert [p.incident_id for p in found] == [b.id]
+        await store.close()
+
+    asyncio.run(run())

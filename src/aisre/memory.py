@@ -67,11 +67,20 @@ class Memory:
         content = _content(rca, runbook_text)
         await self._store.add_memory(incident_id, content, rca, self._embedder.embed(content))
 
-    async def similar(self, query: str, k: int = 3) -> list[PastIncident]:
-        rows = await self._store.nearest(self._embedder.embed(query), k)
-        return [
+    async def similar(
+        self, query: str, k: int = 3, exclude_incident_id: int | None = None
+    ) -> list[PastIncident]:
+        """Só entram na memória RCAs conclusivos de incidentes concluídos (ver `run_investigation`);
+        aqui ainda se descarta o incidente atual e qualquer RCA sem causa."""
+        if k <= 0:
+            return []
+        extra = 1 if exclude_incident_id is not None else 0
+        rows = await self._store.nearest(self._embedder.embed(query), k + extra)
+        found = [
             PastIncident(
                 incident_id=r.incident_id, content=r.content, rca=r.rca, distance=r.distance
             )
             for r in rows
+            if r.incident_id != exclude_incident_id and r.rca.cause is not None and not r.rca.unknown
         ]
+        return found[:k]

@@ -46,3 +46,14 @@ def test_similar_respects_k_and_empty_store():
         return await memory.similar("a b", k=1)
 
     assert len(asyncio.run(run())) == 1
+
+
+def test_similar_excludes_current_incident_and_zero_k():
+    async def run():
+        memory = Memory(MemoryStore())
+        await memory.save(1, _rca("Pod morto por OOMKilled", "limite de memória"))
+        await memory.save(2, _rca("Pod morto por OOMKilled", "limite de memória"))
+        assert await memory.similar("OOMKilled", k=0) == []
+        return await memory.similar("OOMKilled", k=1, exclude_incident_id=1)
+
+    assert [p.incident_id for p in asyncio.run(run())] == [2]

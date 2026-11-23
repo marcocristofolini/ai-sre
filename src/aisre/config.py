@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     slack_channel: str = ""
     slack_api_url: str = "https://slack.com/api"
     tool_timeout_seconds: int = 10
+    memory_top_k: int = Field(default=3, ge=0)  # incidentes anteriores dados ao agente; 0 desativa
     github_token: SecretStr = SecretStr("")
     github_repo: str = ""
     github_api_url: str = "https://api.github.com"

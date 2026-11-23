@@ -59,6 +59,7 @@ ERRO_INVESTIGACAO_CONSENTIMENTO = (
 ERRO_INVESTIGACAO_FALHOU = "A investigação falhou ({tipo})."
 ERRO_INVESTIGACAO_TIMEOUT = "A investigação excedeu o tempo limite de {segundos}s."
 AVISO_HOOK_RCA_FALHOU = "hook on_rca_ready falhou ({tipo})"
+AVISO_MEMORIA_CONSULTA_FALHOU = "não foi possível consultar incidentes anteriores ({tipo}); a investigação segue sem eles"
 AVISO_MEMORIA_FALHOU = "não foi possível salvar o incidente na memória ({tipo})"
 AVISO_STORE_EM_MEMORIA = "AISRE_DATABASE_URL não definido: incidentes ficam apenas em memória e são perdidos ao reiniciar."
 ERRO_WEBHOOK_MUITO_GRANDE = "Corpo da requisição excede o limite de {limite} bytes."

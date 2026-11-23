@@ -158,15 +158,31 @@ class _Investigation:
         return RCA(cause=cause, confidence=confidence, evidence=cited, suggested_command=command)
 
 
-async def investigate(alert: Alert, tools: list[Tool], llm: LLMProvider, max_steps: int = 12) -> RCA:
-    """Investiga o alerta. Nunca levanta exceção, exceto `ConsentRequired` (erro de configuração)."""
+async def investigate(
+    alert: Alert,
+    tools: list[Tool],
+    llm: LLMProvider,
+    max_steps: int = 12,
+    past: list | None = None,
+) -> RCA:
+    """Investiga o alerta. Nunca levanta exceção, exceto `ConsentRequired` (erro de configuração).
+
+    `past`: incidentes anteriores semelhantes (`PastIncident`), entregues como dado não confiável
+    e sem id: nunca são evidência citável (os ids E1.. vêm só das ferramentas desta investigação)."""
     inv = _Investigation(tools)
     specs = inv.specs()
     messages = [
         Message(role="system", content=p.SYSTEM_PROMPT),
         Message(
             role="user",
-            content=p.render_alert(alert.name, alert.labels, alert.fired_at.isoformat()),
+            content="\n".join(
+                part
+                for part in (
+                    p.render_alert(alert.name, alert.labels, alert.fired_at.isoformat()),
+                    p.render_past_incidents(past or []),
+                )
+                if part
+            ),
         ),
     ]
     for _ in range(max_steps):

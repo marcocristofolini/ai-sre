@@ -118,7 +118,7 @@ def create_app(
     app.state.settings = settings
     app.state.store = store
     app.state.memory = Memory(store)
-    app.state.investigator = investigator or default_investigator(settings)
+    app.state.investigator = investigator or default_investigator(settings, app.state.memory)
     # Registro por app (não global): cada app publica no Slack com a sua configuração.
     app.state.rca_hooks = [make_hook(settings, slack_transport)]
     app.state.predictive = None

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable, Sequence
+from contextvars import ContextVar
 
 from aisre import strings_pt as t
 from aisre.agent.loop import Alert, investigate
@@ -13,7 +14,7 @@ from aisre.config import Settings
 from aisre.db import Store
 from aisre.llm.base import build_provider
 from aisre.llm.gate import ConsentRequired
-from aisre.memory import Memory
+from aisre.memory import Memory, PastIncident
 from aisre.schemas import RCA
 from aisre.tools import build_tools
 
@@ -22,10 +23,30 @@ log = logging.getLogger(__name__)
 Investigator = Callable[[Alert], Awaitable[RCA]]
 
 
-def default_investigator(settings: Settings) -> Investigator:
+# Incidente em investigação nesta tarefa (para excluí-lo da busca por semelhantes).
+current_incident: ContextVar[int | None] = ContextVar("aisre_current_incident", default=None)
+
+
+def alert_query(alert: Alert) -> str:
+    return " ".join([alert.name, *(f"{k} {v}" for k, v in sorted(alert.labels.items()))])
+
+
+async def recall_similar(memory: Memory | None, alert: Alert, top_k: int) -> list[PastIncident]:
+    """Incidentes anteriores semelhantes; qualquer falha é registrada (só o tipo) e vira lista vazia."""
+    if memory is None or top_k <= 0:
+        return []
+    try:
+        return await memory.similar(alert_query(alert), top_k, exclude_incident_id=current_incident.get())
+    except Exception as exc:  # noqa: BLE001 - só o tipo
+        log.warning(t.AVISO_MEMORIA_CONSULTA_FALHOU.format(tipo=type(exc).__name__))
+        return []
+
+
+def default_investigator(settings: Settings, memory: Memory | None = None) -> Investigator:
     async def run(alert: Alert) -> RCA:
         # Construído por investigação: falhas de configuração viram incidente falho, não crash.
-        return await investigate(alert, build_tools(settings), build_provider(settings))
+        past = await recall_similar(memory, alert, settings.memory_top_k)
+        return await investigate(alert, build_tools(settings), build_provider(settings), past=past)
 
     return run
 
@@ -49,6 +70,7 @@ async def run_investigation(
 ) -> None:
     """Falhas (inclusive do armazenamento) são registradas e engolidas; só o cancelamento
     propaga, depois de marcar o incidente como falho."""
+    current_incident.set(incident_id)  # a tarefa de investigação tem contexto próprio
     try:
         if semaphore is None:
             rca = await asyncio.wait_for(investigator(alert), timeout=timeout_seconds)
