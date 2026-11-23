@@ -4,3 +4,5 @@ __pycache__/
 node_modules/
 *.egg-info/
 eval/
+web/node_modules/
+web/dist/

@@ -81,3 +81,22 @@ ERRO_SLACK_NAO_APROVADOR = "Usuário não autorizado a aprovar."
 ERRO_SLACK_SEM_COMANDO = "O incidente não tem comando sugerido para aprovar."
 SLACK_APROVACAO_REGISTRADA = "Aprovação registrada; nada foi executado."
 SLACK_COMANDO_NAO_EXIBIVEL = "O comando sugerido não pode ser exibido por inteiro e sem alterações; por isso não há botão de aprovação."
+
+# Dashboard: autenticação, risco, placar, integrações
+ERRO_NAO_AUTENTICADO = "Não autenticado."
+ERRO_ORIGEM_INVALIDA = "Origem da requisição não permitida."
+ERRO_LOGIN_INVALIDO = "Usuário ou senha inválidos."
+ERRO_LOGIN_NAO_CONFIGURADO = (
+    "Login não configurado: defina AISRE_ADMIN_PASSWORD_HASH e AISRE_SESSION_SECRET "
+    "(veja `python -m aisre.auth`)."
+)
+ERRO_LOGIN_BLOQUEADO = "Muitas tentativas de login; tente novamente mais tarde."
+ERRO_CLI_SENHA = "Senha vazia ou as senhas não coincidem."
+USO_CLI_AUTH = "uso: python -m aisre.auth hash | secret"
+ERRO_APROVACAO_COMANDO_NAO_EXIBIVEL = "O comando sugerido não pode ser exibido por inteiro; aprovação indisponível."
+APROVACAO_REGISTRADA = "Aprovação registrada; nada foi executado."
+ALERTA_RISCO_PREDITIVO = "RiscoPreditivo"
+AVISO_PREDITIVO_NAO_INICIADO = "agendador preditivo não iniciado (Prometheus ou workloads não configurados)"
+AVISO_PREDITIVO_FALHOU = "agendador preditivo encerrou com erro ({tipo})"
+AVISO_PREDITIVO_INVESTIGACAO_FALHOU = "falha ao abrir investigação preditiva ({tipo})"
+AVISO_PLACAR_ILEGIVEL = "arquivo do placar ilegível ou inválido ({tipo})"

@@ -1,5 +1,13 @@
-from pydantic import Field, SecretStr
+from pydantic import BaseModel, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class PredictWorkload(BaseModel):
+    """Workload monitorado pelo preditivo: `name` = "namespace/workload"; `query` = PromQL que
+    devolve UMA série (use agregação), usada no backfill (query_range) e na leitura atual."""
+
+    name: str = Field(pattern=r"^[^/\s]+/[^/\s]+$")
+    query: str = Field(min_length=1)
 
 
 class Settings(BaseSettings):
@@ -30,3 +38,24 @@ class Settings(BaseSettings):
     max_alerts_per_request: int = 100
     risk_threshold: float = Field(default=0.65, ge=0.0, le=1.0)
     min_baseline_points: int = Field(default=500, ge=1)
+    scoreboard_path: str = "eval/scoreboard.json"
+    web_dist_dir: str = ""  # vazio = <repositório>/web/dist (servido só se existir)
+    # Login local do dashboard. Sem padrões: hash/segredo vazios => login falha fechado.
+    admin_user: str = "admin"
+    admin_password_hash: SecretStr = SecretStr("")  # scrypt$n$r$p$salt$hash (python -m aisre.auth hash)
+    session_secret: SecretStr = SecretStr("")
+    session_cookie_secure: bool = True  # só desligue em desenvolvimento local (http)
+    session_ttl_seconds: int = Field(default=8 * 3600, ge=60)
+    # Preditivo: vazio => agendador não inicia.
+    predict_workloads: list[PredictWorkload] = Field(default_factory=list)
+    predict_interval_seconds: float = Field(default=60.0, gt=0)
+    predict_backfill_seconds: int = Field(default=7 * 86400, ge=1)
+    predict_backfill_step_seconds: int = Field(default=60, ge=1)
+
+    @field_validator("predict_workloads")
+    @classmethod
+    def _unique_workloads(cls, v: list[PredictWorkload]) -> list[PredictWorkload]:
+        names = [w.name for w in v]
+        if len(set(names)) != len(names):
+            raise ValueError("predict_workloads com nomes repetidos")
+        return v

@@ -47,3 +47,19 @@ class PrometheusTool:
         if len(result) > 1:
             raise ValueError("query_range devolveu mais de uma série; use uma consulta agregadora")
         return np.array([float(v[1]) for v in result[0].get("values", [])], dtype=np.float64)
+
+    async def query_instant(self, query: str) -> np.ndarray:
+        """Ponto atual (instant query) de uma única série, como array de 1 valor; somente GET.
+
+        Sem resultado devolve array vazio (o detector trata como sem sinal); várias séries ou
+        resultado que não seja vetor levantam ValueError; falha de rede/HTTP propaga."""
+        resp = await self._http.get(f"{self._base}/api/v1/query", params={"query": query})
+        data = resp.json().get("data", {})
+        result = data.get("result", [])
+        if data.get("resultType") not in (None, "vector") or not isinstance(result, list):
+            raise ValueError("query_instant espera resultado do tipo vetor")
+        if not result:
+            return np.empty(0, dtype=np.float64)
+        if len(result) > 1:
+            raise ValueError("query_instant devolveu mais de uma série; use uma consulta agregadora")
+        return np.array([float(result[0]["value"][1])], dtype=np.float64)

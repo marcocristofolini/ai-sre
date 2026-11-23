@@ -9,6 +9,7 @@ from urllib.parse import urlencode
 
 import httpx
 import pytest
+from authhelp import login, with_auth
 from fastapi.testclient import TestClient
 
 from aisre.agent.loop import Alert
@@ -92,8 +93,10 @@ def _setup(rca="default", settings=None, transport=None):
 
     store = MemoryStore()
     inc = asyncio.run(_seed(store, _rca() if rca == "default" else rca))
-    app = create_app(settings or _settings(), store, slack_transport=transport)
-    return TestClient(app), store, inc
+    app = create_app(with_auth(settings or _settings()), store, slack_transport=transport)
+    client = TestClient(app)
+    login(client)  # só para ler /incidents; /slack/actions segue autenticado pela assinatura
+    return client, store, inc
 
 
 def _post(client, body, headers=None):

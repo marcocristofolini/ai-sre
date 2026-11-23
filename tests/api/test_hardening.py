@@ -4,6 +4,7 @@ import json
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from authhelp import login, with_auth
 from fastapi.testclient import TestClient
 
 from aisre.agent.loop import Alert
@@ -35,8 +36,10 @@ class Fake:
 
 
 def _client(store=None, investigator=None, **settings):
-    app = create_app(Settings(_env_file=None, **settings), store or MemoryStore(), investigator or Fake())
-    return TestClient(app), app
+    app = create_app(with_auth(Settings(_env_file=None, **settings)), store or MemoryStore(), investigator or Fake())
+    client = TestClient(app)
+    login(client)
+    return client, app
 
 
 @pytest.fixture(autouse=True)

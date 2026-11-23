@@ -2,6 +2,7 @@ import logging
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from authhelp import login, with_auth
 from fastapi.testclient import TestClient
 
 from aisre.api import hooks
@@ -43,8 +44,10 @@ class Fake:
 
 
 def _client(investigator=None, store=None, **settings):
-    app = create_app(Settings(_env_file=None, **settings), store or MemoryStore(), investigator or Fake())
-    return TestClient(app), app
+    app = create_app(with_auth(Settings(_env_file=None, **settings)), store or MemoryStore(), investigator or Fake())
+    client = TestClient(app)
+    login(client)  # /incidents* exigem sessão; o webhook não
+    return client, app
 
 
 @pytest.fixture(autouse=True)

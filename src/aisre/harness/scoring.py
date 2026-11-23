@@ -11,12 +11,18 @@ class GradedResult(BaseModel):
     confidence: float
 
 
+class CalibrationBin(BaseModel):
+    confidence: float
+    hit_rate: float
+
+
 class Scoreboard(BaseModel):
     correct: int
     total: int
     model: str
     injection_errors: int = 0
     label: str = t.ROTULO_CENARIOS_SINTETICOS
+    calibration: list[CalibrationBin] = []
 
 
 def _norm(text: str) -> str:
@@ -54,4 +60,8 @@ def scoreboard(
         total=len(results),
         model=model,
         injection_errors=injection_errors,
+        calibration=[
+            CalibrationBin(confidence=c, hit_rate=h)
+            for c, h in calibration([(r.confidence, r.correct) for r in results])
+        ],
     )
