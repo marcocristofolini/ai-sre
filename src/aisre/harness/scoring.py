@@ -28,8 +28,8 @@ def grade(rca: RCA, scenario: Scenario) -> bool:
         return False
     if _norm(rca.cause) != _norm(scenario.expected_cause):
         return False
-    refs = {e.ref for e in rca.evidence}
-    return any(r in refs for r in scenario.expected_evidence_refs)
+    patterns = [p for p in scenario.expected_evidence_refs if p]
+    return any(e.ref.startswith(p) for e in rca.evidence for p in patterns)
 
 
 def calibration(
