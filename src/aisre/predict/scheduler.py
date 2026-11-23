@@ -67,11 +67,14 @@ async def backfill_detector(
 ) -> int:
     """Ajusta o detector com o histórico do Prometheus; devolve nº de pontos lidos.
 
-    Falha de leitura é registrada (só o tipo) e deixa o detector como estava."""
+    Falha de leitura (inclusive resposta com mais de uma série: use query agregadora) é
+    registrada (só o tipo) e devolve 0. Histórico vazio ou curto demais também deixa o
+    detector como estava (ativo continua ativo)."""
     try:
         history = await prometheus.query_range(query, start, end, step)
     except Exception as exc:
         log.warning("backfill do Prometheus falhou (%s)", type(exc).__name__)
         return 0
-    detector.fit(history)
+    # histórico vazio/curto não derruba um detector já ativo
+    detector.fit_if_sufficient(history)
     return int(history.size)

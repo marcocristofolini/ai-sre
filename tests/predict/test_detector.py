@@ -183,11 +183,22 @@ def test_scheduler_failed_open_does_not_start_cooldown():
     assert calls == ["a", "a"]
 
 
-def test_scheduler_score_exactly_at_threshold_does_not_open():
+class _StubDetector:
+    state = "ativo"
+
+    def __init__(self, value):
+        self.value = value
+
+    def score(self, point):
+        return self.value
+
+
+def test_scheduler_threshold_boundary_is_strict():
     opened = []
-    s = _sched({"a": _detector(True)}, {"a": 200.0}, opened, threshold=1.0)
+    dets = {"eq": _StubDetector(0.65), "above": _StubDetector(0.650001)}
+    s = _sched(dets, {"eq": 1.0, "above": 1.0}, opened, threshold=0.65)
     asyncio.run(s.run_once())
-    assert opened == []
+    assert opened == ["above"]
 
 
 def test_settings_defaults():
@@ -274,3 +285,34 @@ def test_new_scenarios_have_manifests_in_their_namespace():
         text = (root / f"{s.id}.yaml").read_text()
         assert f"namespace: {s.namespace}" in text
         assert f"name: {s.namespace}" in text
+
+
+def _tool_with(handler):
+    return PrometheusTool("http://prom:9090", transport=httpx.MockTransport(handler))
+
+
+@pytest.mark.parametrize("n", [0, 5])
+def test_backfill_empty_or_short_keeps_active_detector_active(n):
+    det = WorkloadDetector(min_baseline_points=100)
+    det.fit(_normal(200))
+    tool = _tool_with(lambda r: httpx.Response(200, json=_matrix(list(_normal(n)) if n else [])))
+    asyncio.run(backfill_detector(det, tool, "up", 0, 600, 60))
+    assert det.state == "ativo"
+    assert det.score(np.array([160.0])) > det.score(np.array([100.0]))
+
+
+def test_query_range_multiple_series_raises():
+    body = {"status": "success", "data": {"result": [
+        {"metric": {"pod": "a"}, "values": [[0, "1"]]}, {"metric": {"pod": "b"}, "values": [[0, "2"]]}]}}
+    tool = _tool_with(lambda r: httpx.Response(200, json=body))
+    with pytest.raises(ValueError):
+        asyncio.run(tool.query_range("up", 0, 60, 60))
+
+
+def test_backfill_multiple_series_leaves_detector_untouched(caplog):
+    body = {"status": "success", "data": {"result": [
+        {"metric": {}, "values": [[0, "1"]]}, {"metric": {}, "values": [[0, "2"]]}]}}
+    det = WorkloadDetector(min_baseline_points=10)
+    with caplog.at_level("WARNING"):
+        n = asyncio.run(backfill_detector(det, _tool_with(lambda r: httpx.Response(200, json=body)), "up", 0, 60, 60))
+    assert n == 0 and det.state == "aprendendo" and "ValueError" in caplog.text

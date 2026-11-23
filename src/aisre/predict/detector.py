@@ -38,6 +38,15 @@ class WorkloadDetector:
     def state(self) -> State:
         return "ativo" if self._model is not None else "aprendendo"
 
+    def fit_if_sufficient(self, series: np.ndarray) -> bool:
+        """Como `fit`, mas só substitui o modelo se a série tiver pontos finitos
+        suficientes; caso contrário mantém o estado atual. Devolve se ajustou."""
+        data = _as_matrix(series) if np.size(series) else np.empty((0, 1))
+        if int(np.isfinite(data).all(axis=1).sum()) < self._min:
+            return False
+        self.fit(series)
+        return True
+
     def fit(self, series: np.ndarray) -> None:
         data = _as_matrix(series) if np.size(series) else np.empty((0, 1))
         data = data[np.isfinite(data).all(axis=1)]

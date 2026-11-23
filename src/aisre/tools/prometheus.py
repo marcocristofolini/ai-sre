@@ -32,9 +32,9 @@ class PrometheusTool:
             return error_result(ref, exc)
 
     async def query_range(self, query: str, start: float, end: float, step: float) -> np.ndarray:
-        """Série numérica (primeira série retornada) para backfill; somente GET.
+        """Série numérica de uma única série (consulta agregadora) para backfill; somente GET.
 
-        Levanta em falha de rede/HTTP; NaN/inf permanecem no array (o detector os descarta)."""
+        Levanta ValueError se vierem várias séries; levanta em falha de rede/HTTP; NaN/inf permanecem no array (o detector os descarta)."""
         if step <= 0 or end < start or (end - start) / step > MAX_RANGE_POINTS:
             raise ValueError("intervalo/passo inválido para query_range")
         resp = await self._http.get(
@@ -44,4 +44,6 @@ class PrometheusTool:
         result = resp.json().get("data", {}).get("result", [])
         if not result:
             return np.empty(0, dtype=np.float64)
+        if len(result) > 1:
+            raise ValueError("query_range devolveu mais de uma série; use uma consulta agregadora")
         return np.array([float(v[1]) for v in result[0].get("values", [])], dtype=np.float64)
