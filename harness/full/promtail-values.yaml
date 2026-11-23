@@ -1,0 +1,5 @@
+# Promtail envia os logs dos pods ao Loki do `make eval-full` (sem ele não haveria log: evidências).
+# NÃO verificado: sem helm/kind/Docker onde isto foi escrito.
+config:
+  clients:
+    - url: http://loki.observability.svc:3100/loki/api/v1/push
