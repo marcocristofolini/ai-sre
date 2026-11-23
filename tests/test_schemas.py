@@ -28,6 +28,18 @@ def test_unknown_rca_has_no_cause():
     assert rca.cause is None
 
 
-def test_external_consent_defaults_false():
-    assert Settings().llm_external_consent is False
-    assert Settings().slack_approvers == []
+def test_external_consent_defaults_false(monkeypatch):
+    import os
+
+    for key in [k for k in os.environ if k.startswith("AISRE_")]:
+        monkeypatch.delenv(key)
+    settings = Settings(_env_file=None)
+    assert settings.llm_external_consent is False
+    assert settings.slack_approvers == []
+
+
+def test_external_consent_ignores_env_when_unset_defaults(monkeypatch):
+    monkeypatch.setenv("AISRE_LLM_EXTERNAL_CONSENT", "true")
+    assert Settings(_env_file=None).llm_external_consent is True
+    monkeypatch.delenv("AISRE_LLM_EXTERNAL_CONSENT")
+    assert Settings(_env_file=None).llm_external_consent is False
