@@ -29,6 +29,9 @@ export const S = {
     nivel: { alta: "alta", media: "média", baixa: "baixa" },
     comando: "Comando sugerido",
     comandoNaoExecutado: "Este comando não é executado pelo produto; a aprovação só é registrada.",
+    comandoGeradoPorIa: "Atenção: comando gerado por IA a partir de dados não confiáveis; revise antes de executar manualmente.",
+    comandoForaListaLeitura:
+      "Este comando está fora da lista de comandos somente leitura (kubectl get/describe/logs/top) e pode alterar o cluster.",
     comandoNaoExibivel: "O comando não pode ser exibido por inteiro; por isso não há botão de aprovação.",
     aprovar: "Aprovar",
     aprovando: "Registrando…",

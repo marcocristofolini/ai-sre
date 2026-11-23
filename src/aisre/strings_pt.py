@@ -11,6 +11,7 @@ ROTULO_CENARIOS_SINTETICOS = "cenários sintéticos"
 ERRO_FERRAMENTA_SOMENTE_LEITURA = "Operação bloqueada: as ferramentas são somente leitura."
 ERRO_FERRAMENTA_TIMEOUT = "Tempo esgotado ao consultar o backend."
 ERRO_FERRAMENTA_FALHA = "Falha ao consultar o backend: {detalhe}"
+ERRO_FERRAMENTA_HTTP = "HTTP {status}"
 ERRO_FERRAMENTA_ARGUMENTO = "Argumento obrigatório ausente: {nome}"
 ERRO_FERRAMENTA_TIPO_K8S = "Tipo de recurso Kubernetes não suportado: {tipo}"
 AVISO_SAIDA_TRUNCADA = "\n[... saída truncada em {limite} caracteres ...]"
@@ -69,6 +70,13 @@ SLACK_EVIDENCIA_LINHA = "• [{tipo}] {ref}: {resumo}"
 SLACK_EVIDENCIAS_OMITIDAS = "… e mais {n} evidência(s) omitida(s)."
 SLACK_COMANDO = "*Comando sugerido (não é executado automaticamente):*"
 SLACK_BOTAO_APROVAR = "Aprovar"
+AVISO_COMANDO_GERADO_POR_IA = (
+    "Atenção: comando gerado por IA a partir de dados não confiáveis; revise antes de executar manualmente."
+)
+AVISO_COMANDO_FORA_LISTA_LEITURA = (
+    "Este comando está fora da lista de comandos somente leitura (kubectl get/describe/logs/top) "
+    "e pode alterar o cluster."
+)
 SLACK_AVISO_FALHA_API = "falha ao publicar RCA no Slack ({tipo})"
 SLACK_AVISO_ERRO_API = "o Slack recusou a publicação do RCA (erro: {codigo})"
 SLACK_AVISO_HTTP = "o Slack respondeu HTTP {status} ao publicar o RCA"

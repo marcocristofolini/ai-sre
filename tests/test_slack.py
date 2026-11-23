@@ -453,3 +453,78 @@ def test_displayed_command_equals_recorded_command():
     client, _, inc = _setup(rca=rca)
     assert _post(client, _form("U1", str(inc.id))).status_code == 200
     assert client.get(f"/incidents/{inc.id}").json()["approvals"][0]["command"] == cmd
+
+
+# --- I5: caracteres invisíveis, aviso de IA, lista de leitura e auto-link ---
+
+from aisre.slack import build_message, command_is_read_only, command_is_showable  # noqa: E402
+
+
+@pytest.mark.parametrize(
+    "cmd",
+    [
+        "kubectl get pods‮ -n prod",  # RLO (bidi override)
+        "kubectl get pods⁦x⁩",  # isolates
+        "kubectl get​ pods",  # zero-width space
+        "kubectl get pods\x1b[2K",  # escape ANSI
+        "kubectl get pods\rrm -rf /",  # retorno de carro esconde o início no terminal
+        "kubectl get pods rm",  # separador de linha
+        "kubectl get pods﻿",  # BOM
+    ],
+)
+def test_command_with_invisible_or_control_chars_is_not_showable(cmd):
+    assert command_is_showable(cmd) is False
+    blob = json.dumps(build_message(7, _rca(suggested_command=cmd)), ensure_ascii=False)
+    assert "Aprovar" not in blob
+
+
+def test_dashboard_approvable_uses_same_rule_for_invisible_chars():
+    client, _, inc = _setup(rca=_rca(suggested_command="kubectl get pods‮"))
+    detail = client.get(f"/incidents/{inc.id}").json()
+    assert detail["approvable"] is False
+
+
+@pytest.mark.parametrize(
+    "cmd,expected",
+    [
+        ("kubectl get pods -n prod", True),
+        ("kubectl describe pod api-1 -n prod", True),
+        ("kubectl logs api-1 -n prod --tail=100", True),
+        ("kubectl top pod -n prod", True),
+        ("kubectl rollout restart deploy/api -n prod", False),
+        ("kubectl get pods; kubectl delete ns prod", False),
+        ("kubectl get pods && rm -rf /", False),
+        ("kubectl get pods | sh", False),
+        ("kubectl get pods $(id)", False),
+        ("kubectl delete pod x", False),
+        ("kubectlget pods", False),
+    ],
+)
+def test_read_only_allow_list(cmd, expected):
+    assert command_is_read_only(cmd) is expected
+
+
+def _all_text(body):
+    return json.dumps(body, ensure_ascii=False)
+
+
+def test_slack_warns_command_is_ai_generated_and_flags_non_read_only():
+    body = build_message(7, _rca(suggested_command=CMD))  # rollout restart: altera estado
+    blob = _all_text(body)
+    assert "gerado por IA a partir de dados não confiáveis" in blob
+    assert "revise antes de executar manualmente" in blob
+    assert "fora da lista de comandos somente leitura" in blob
+    ro = _all_text(build_message(7, _rca(suggested_command="kubectl get pods -n prod")))
+    assert "gerado por IA a partir de dados não confiáveis" in ro
+    assert "fora da lista de comandos somente leitura" not in ro
+
+
+def test_slack_mrkdwn_is_verbatim_and_links_do_not_unfurl():
+    sent, tr = _capture()
+    rca = _rca(cause="veja https://evil.example/login", evidence=[Evidence(kind="log", ref="log:a", summary="www.evil.example")])
+    asyncio.run(post_rca("C123", 7, rca, token=TOKEN, transport=tr))
+    body = json.loads(sent[0].content)
+    assert body["unfurl_links"] is False and body["unfurl_media"] is False
+    for b in body["blocks"]:
+        if b["type"] == "section" and b["text"]["type"] == "mrkdwn":
+            assert b["text"].get("verbatim") is True

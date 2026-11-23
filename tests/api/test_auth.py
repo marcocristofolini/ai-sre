@@ -220,6 +220,17 @@ def test_approve_records_command_from_stored_rca_ignoring_body():
     assert detail["approvable"] is True
 
 
+def test_incident_detail_flags_read_only_commands():
+    client, _, inc = _app()  # CMD altera estado
+    login(client)
+    assert client.get(f"/incidents/{inc.id}").json()["command_read_only"] is False
+    ro = RCA(cause="OOM", confidence=0.8, evidence=[Evidence(kind="log", ref="l", summary="x")],
+             suggested_command="kubectl describe pod api-1 -n prod")
+    client2, _, inc2 = _app(rca=ro)
+    login(client2)
+    assert client2.get(f"/incidents/{inc2.id}").json()["command_read_only"] is True
+
+
 def test_approve_is_idempotent():
     client, _, inc = _app()
     login(client)
@@ -236,6 +247,10 @@ def test_approve_is_idempotent():
         suggested_command="echo `id`"),
     RCA(cause="OOM", confidence=0.8, evidence=[Evidence(kind="log", ref="l", summary="x")],
         suggested_command="echo " + "a" * 3000),
+    RCA(cause="OOM", confidence=0.8, evidence=[Evidence(kind="log", ref="l", summary="x")],
+        suggested_command="kubectl get pods\u202e -n prod"),
+    RCA(cause="OOM", confidence=0.8, evidence=[Evidence(kind="log", ref="l", summary="x")],
+        suggested_command="kubectl get\u200b pods"),
 ])
 def test_approve_refused_for_unknown_missing_or_unshowable_command(rca):
     client, _, inc = _app(rca=rca)

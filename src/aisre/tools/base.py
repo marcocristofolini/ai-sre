@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
 import httpx
 
 from aisre import strings_pt as t
+from aisre.llm.redaction import redact
 
 # Limite de caracteres da saída de uma ferramenta, para não inundar o contexto do LLM.
 MAX_OUTPUT_CHARS = 8000
@@ -35,11 +37,27 @@ def truncate(text: str) -> str:
     return text[:MAX_OUTPUT_CHARS] + t.AVISO_SAIDA_TRUNCADA.format(limite=MAX_OUTPUT_CHARS)
 
 
+# scheme://<userinfo>@ -> scheme:// (usuário e senha somem; o host continua útil para diagnóstico)
+_USERINFO = re.compile(r"\b([a-zA-Z][a-zA-Z0-9+.-]{0,30}://)[^\s/?#]*@")
+
+
+def strip_url_userinfo(text: str) -> str:
+    return _USERINFO.sub(r"\1", text)
+
+
+def safe_error_text(text: str) -> str:
+    """Texto de erro apto a ir para RCA, dashboard, Slack e LLM: sem userinfo e redigido."""
+    return redact(strip_url_userinfo(text))
+
+
 def error_result(ref: str, exc: BaseException | str) -> ToolResult:
     if isinstance(exc, httpx.TimeoutException | TimeoutError):
         msg = t.ERRO_FERRAMENTA_TIMEOUT
+    elif isinstance(exc, httpx.HTTPStatusError):
+        # A mensagem do httpx traz a URL inteira (com credenciais): só o código de status.
+        msg = t.ERRO_FERRAMENTA_FALHA.format(detalhe=t.ERRO_FERRAMENTA_HTTP.format(status=exc.response.status_code))
     else:
-        msg = t.ERRO_FERRAMENTA_FALHA.format(detalhe=str(exc) or type(exc).__name__)
+        msg = t.ERRO_FERRAMENTA_FALHA.format(detalhe=safe_error_text(str(exc)) or type(exc).__name__)
     return ToolResult(ok=False, data="", error=msg, ref=ref)
 
 

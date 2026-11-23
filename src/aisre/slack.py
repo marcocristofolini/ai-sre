@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import logging
 import re
+import unicodedata
 
 import httpx
 
@@ -47,13 +48,44 @@ def fit(text: str, limit: int) -> str:
 CODE_LIMIT = 2900  # cabe no limite de 3000 do bloco junto com as crases
 
 
+# Controle (Cc, inclusive \r, \n e ESC), formatação invisível (Cf: bidi, zero-width, BOM),
+# separadores de linha/parágrafo, uso privado, substitutos e não atribuídos.
+_HIDDEN_CATEGORIES = {"Cc", "Cf", "Zl", "Zp", "Co", "Cs", "Cn"}
+
+
+def _has_hidden_chars(text: str) -> bool:
+    return any(unicodedata.category(ch) in _HIDDEN_CATEGORIES for ch in text)
+
+
 def command_is_showable(command: str) -> bool:
-    """O comando só pode ser aprovado se o aprovador o vê por inteiro e sem alterações."""
-    return "`" not in command and len(escape(command)) <= CODE_LIMIT
+    """O comando só pode ser aprovado se o aprovador o vê por inteiro e sem alterações:
+    sem crase (fecharia o bloco de código), sem caracteres invisíveis/de controle/bidi
+    (o texto exibido diferiria do executado) e dentro do limite do bloco."""
+    return "`" not in command and not _has_hidden_chars(command) and len(escape(command)) <= CODE_LIMIT
+
+
+# Lista de leitura: só marca o comando como "somente leitura" (sinal visual), não autoriza nada.
+_READ_ONLY = re.compile(r"kubectl[ ]+(?:get|describe|logs|top)(?:[ ]+[A-Za-z0-9_./:=,@%+\-\[\]{}*'\"]+)*[ ]*")
+_SHELL_META = set(";&|`$<>()\\\n\r")
+
+
+def command_is_read_only(command: str) -> bool:
+    """True se o comando é `kubectl get|describe|logs|top` sem metacaracteres de shell."""
+    cmd = command.strip()
+    return (
+        not _has_hidden_chars(cmd)
+        and not any(ch in _SHELL_META for ch in cmd)
+        and _READ_ONLY.fullmatch(cmd) is not None
+    )
 
 
 def _code(command: str) -> str:
     return f"```{escape(command)}```"
+
+
+def _mrkdwn(text: str) -> dict:
+    # verbatim: o Slack não transforma URLs, canais e menções do texto em links.
+    return {"type": "section", "text": {"type": "mrkdwn", "text": text, "verbatim": True}}
 
 
 def build_message(incident_id: int, rca: RCA) -> dict:
@@ -66,7 +98,7 @@ def build_message(incident_id: int, rca: RCA) -> dict:
     else:
         head.append(t.SLACK_CAUSA.format(causa=fit(_oneline(rca.cause or ""), 1000)))
     head.append(t.SLACK_CONFIANCA.format(confianca=round(rca.confidence * 100)))
-    blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": "\n".join(head)[:SECTION_LIMIT]}})
+    blocks.append(_mrkdwn("\n".join(head)[:SECTION_LIMIT]))
 
     lines = [t.SLACK_EVIDENCIAS if not unknown else ""]
     shown = rca.evidence[:MAX_EVIDENCE]
@@ -83,13 +115,17 @@ def build_message(incident_id: int, rca: RCA) -> dict:
     if len(rca.evidence) > len(shown):
         lines.append(t.SLACK_EVIDENCIAS_OMITIDAS.format(n=len(rca.evidence) - len(shown)))
     text = "\n".join(line for line in lines if line)
-    blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": text[:SECTION_LIMIT]}})
+    blocks.append(_mrkdwn(text[:SECTION_LIMIT]))
 
     command = rca.suggested_command
     if not unknown and command:
         if command_is_showable(command):
-            blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": t.SLACK_COMANDO}})
-            blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": _code(command)}})
+            blocks.append(_mrkdwn(t.SLACK_COMANDO))
+            blocks.append(_mrkdwn(_code(command)))
+            aviso = [t.AVISO_COMANDO_GERADO_POR_IA]
+            if not command_is_read_only(command):
+                aviso.append(t.AVISO_COMANDO_FORA_LISTA_LEITURA)
+            blocks.append({"type": "context", "elements": [{"type": "mrkdwn", "text": " ".join(aviso), "verbatim": True}]})
             blocks.append(
                 {
                     "type": "actions",
@@ -105,7 +141,7 @@ def build_message(incident_id: int, rca: RCA) -> dict:
                 }
             )
         else:
-            blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": t.SLACK_COMANDO_NAO_EXIBIVEL}})
+            blocks.append(_mrkdwn(t.SLACK_COMANDO_NAO_EXIBIVEL))
     return {"text": title[:MESSAGE_TEXT_LIMIT], "blocks": blocks}
 
 
@@ -126,7 +162,7 @@ async def post_rca(
     """Sem token ou canal é no-op. Falhas são registradas só por tipo/código e nunca propagam."""
     if not token or not channel:
         return
-    payload = {"channel": channel, **build_message(incident_id, rca)}
+    payload = {"channel": channel, "unfurl_links": False, "unfurl_media": False, **build_message(incident_id, rca)}
     try:
         async with httpx.AsyncClient(transport=transport, timeout=timeout) as client:
             resp = await client.post(

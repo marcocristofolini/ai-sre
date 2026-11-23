@@ -83,6 +83,8 @@ function Approve({ inc, onDone }: { inc: IncidentDetail; onDone: () => void }) {
     <div className="card">
       <h2>{S.incidente.comando}</h2>
       <pre className="command">{command}</pre>
+      <p className="warning" role="note">{S.incidente.comandoGeradoPorIa}</p>
+      {!inc.command_read_only && <p className="warning">{S.incidente.comandoForaListaLeitura}</p>}
       <p className="muted">{S.incidente.comandoNaoExecutado}</p>
       {!inc.approvable && <p className="muted">{S.incidente.comandoNaoExibivel}</p>}
       {inc.approvals.length > 0 && (

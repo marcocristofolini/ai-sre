@@ -14,7 +14,7 @@ from aisre.agent import prompts as p
 from aisre.llm.base import LLMProvider, Message, ToolCall
 from aisre.llm.gate import ConsentRequired
 from aisre.schemas import RCA, Evidence
-from aisre.tools.base import Tool, ToolResult
+from aisre.tools.base import Tool, ToolResult, safe_error_text
 
 EVIDENCE_KINDS = set(get_args(Evidence.model_fields["kind"].annotation))
 SINGLE_EVIDENCE_MAX_CONFIDENCE = 0.6
@@ -83,7 +83,8 @@ class _Investigation:
             result = await tool.call(args)
         except Exception as exc:  # ferramenta fora do contrato: vira erro para o LLM
             return p.wrap_data(
-                p.TOOL_ERR_EXCEPTION.format(detalhe=str(exc) or type(exc).__name__), ok="false"
+                p.TOOL_ERR_EXCEPTION.format(detalhe=safe_error_text(str(exc)) or type(exc).__name__),
+                ok="false",
             )
         if not isinstance(result, ToolResult):
             return p.wrap_data(p.TOOL_ERR_EXCEPTION.format(detalhe=type(result).__name__), ok="false")
@@ -118,7 +119,9 @@ class _Investigation:
             if ref in self.citable:
                 summary = t.EVIDENCIA_COLETADA_SEM_CONCLUSAO
             else:
-                summary = t.EVIDENCIA_CONSULTA_FALHOU.format(erro=res.error or t.ERRO_FERRAMENTA_SEM_DETALHE)
+                # Defesa em profundidade: ferramentas fora do contrato podem devolver erro bruto.
+                erro = safe_error_text(res.error) if res.error else t.ERRO_FERRAMENTA_SEM_DETALHE
+                summary = t.EVIDENCIA_CONSULTA_FALHOU.format(erro=erro)
             out.append(Evidence(kind=kind, ref=ref, summary=summary))
         return out
 

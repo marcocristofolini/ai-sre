@@ -105,6 +105,23 @@ test("nao ha botao de aprovar para RCA sem comando, comando nao exibivel ou apro
   }
 });
 
+test("comando sugerido mostra aviso de IA e marca comandos fora da lista de leitura", async () => {
+  open(42, { "GET /incidents/42": incident({ command_read_only: false }) });
+  expect(await screen.findByText(S.incidente.comandoGeradoPorIa)).toBeInTheDocument();
+  expect(S.incidente.comandoGeradoPorIa).toMatch(/gerado por IA a partir de dados não confiáveis; revise antes de executar manualmente/);
+  expect(screen.getByText(S.incidente.comandoForaListaLeitura)).toBeInTheDocument();
+});
+
+test("comando somente leitura mostra aviso de IA sem o aviso de fora da lista", async () => {
+  const inc = incident({
+    command_read_only: true,
+    rca: { cause: "x", confidence: 0.6, evidence, suggested_command: "kubectl get pods -n prod", unknown: false },
+  });
+  open(42, { "GET /incidents/42": inc });
+  expect(await screen.findByText(S.incidente.comandoGeradoPorIa)).toBeInTheDocument();
+  expect(screen.queryByText(S.incidente.comandoForaListaLeitura)).not.toBeInTheDocument();
+});
+
 test("aprovar chama o endpoint sem enviar comando no corpo", async () => {
   const user = userEvent.setup();
   let approved = false;
