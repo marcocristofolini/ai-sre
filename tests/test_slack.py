@@ -528,3 +528,32 @@ def test_slack_mrkdwn_is_verbatim_and_links_do_not_unfurl():
     for b in body["blocks"]:
         if b["type"] == "section" and b["text"]["type"] == "mrkdwn":
             assert b["text"].get("verbatim") is True
+
+
+@pytest.mark.parametrize(
+    "cmd,reason,text",
+    [
+        ("kubectl get pods\nkubectl delete ns prod", "controle", "quebra de linha/caracteres de controle não pode ser aprovado"),
+        ("kubectl get pods\x1b[2J", "controle", "quebra de linha/caracteres de controle não pode ser aprovado"),
+        ("echo `id`", "crase", "crase"),
+        ("kubectl get pods " + "a" * 3000, "longo", "longo demais"),
+    ],
+)
+def test_blocked_command_explains_why_in_slack_and_dashboard(cmd, reason, text):
+    from aisre.slack import command_block_reason
+
+    assert command_block_reason(cmd) == reason
+    blob = json.dumps(build_message(7, _rca(suggested_command=cmd)), ensure_ascii=False)
+    assert "Aprovar" not in blob and text in blob
+    client, _, inc = _setup(rca=_rca(suggested_command=cmd))
+    detail = client.get(f"/incidents/{inc.id}").json()
+    assert detail["approvable"] is False and detail["approval_blocked_reason"] == reason
+
+
+def test_plain_newline_stays_unapprovable_and_ok_command_has_no_reason():
+    client, _, inc = _setup(rca=_rca(suggested_command="kubectl get pods"))
+    detail = client.get(f"/incidents/{inc.id}").json()
+    assert detail["approvable"] is True and detail["approval_blocked_reason"] is None
+    client, _, inc = _setup(rca=_rca(suggested_command="kubectl get pods\nkubectl get nodes"))
+    r = client.post(f"/incidents/{inc.id}/approve", headers={"Origin": "http://testserver"})
+    assert r.status_code == 409

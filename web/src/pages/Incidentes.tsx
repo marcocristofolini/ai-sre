@@ -86,7 +86,12 @@ function Approve({ inc, onDone }: { inc: IncidentDetail; onDone: () => void }) {
       <p className="warning" role="note">{S.incidente.comandoGeradoPorIa}</p>
       {!inc.command_read_only && <p className="warning">{S.incidente.comandoForaListaLeitura}</p>}
       <p className="muted">{S.incidente.comandoNaoExecutado}</p>
-      {!inc.approvable && <p className="muted">{S.incidente.comandoNaoExibivel}</p>}
+      {!inc.approvable && (
+        <p className="muted">
+          {(inc.approval_blocked_reason && S.incidente.comandoNaoAprovavel[inc.approval_blocked_reason]) ||
+            S.incidente.comandoNaoExibivel}
+        </p>
+      )}
       {inc.approvals.length > 0 && (
         <>
           <p className="ok">{S.incidente.nadaExecutado}</p>

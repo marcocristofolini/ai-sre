@@ -57,11 +57,30 @@ def _has_hidden_chars(text: str) -> bool:
     return any(unicodedata.category(ch) in _HIDDEN_CATEGORIES for ch in text)
 
 
+def command_block_reason(command: str) -> str | None:
+    """Por que o comando não pode ser aprovado: "controle" (quebra de linha/caracteres de controle,
+    invisíveis ou bidi: o texto exibido diferiria do executado), "crase" (fecharia o bloco de código),
+    "longo" (não cabe por inteiro no bloco) ou None se pode. Uma quebra de linha simples continua
+    recusada: um `\\n` num comando de shell separa comandos, e a aprovação é sobre o texto inteiro."""
+    if _has_hidden_chars(command):
+        return "controle"
+    if "`" in command:
+        return "crase"
+    if len(escape(command)) > CODE_LIMIT:
+        return "longo"
+    return None
+
+
 def command_is_showable(command: str) -> bool:
-    """O comando só pode ser aprovado se o aprovador o vê por inteiro e sem alterações:
-    sem crase (fecharia o bloco de código), sem caracteres invisíveis/de controle/bidi
-    (o texto exibido diferiria do executado) e dentro do limite do bloco."""
-    return "`" not in command and not _has_hidden_chars(command) and len(escape(command)) <= CODE_LIMIT
+    """O comando só pode ser aprovado se o aprovador o vê por inteiro e sem alterações."""
+    return command_block_reason(command) is None
+
+
+NOT_APPROVABLE_SLACK = {
+    "controle": t.SLACK_COMANDO_NAO_APROVAVEL_CONTROLE,
+    "crase": t.SLACK_COMANDO_NAO_APROVAVEL_CRASE,
+    "longo": t.SLACK_COMANDO_NAO_APROVAVEL_LONGO,
+}
 
 
 # Lista de leitura: só marca o comando como "somente leitura" (sinal visual), não autoriza nada.
@@ -141,7 +160,7 @@ def build_message(incident_id: int, rca: RCA) -> dict:
                 }
             )
         else:
-            blocks.append(_mrkdwn(t.SLACK_COMANDO_NAO_EXIBIVEL))
+            blocks.append(_mrkdwn(NOT_APPROVABLE_SLACK.get(command_block_reason(command) or "", t.SLACK_COMANDO_NAO_EXIBIVEL)))
     return {"text": title[:MESSAGE_TEXT_LIMIT], "blocks": blocks}
 
 

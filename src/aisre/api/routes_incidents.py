@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from aisre import strings_pt as t
 from aisre.auth import require_same_origin, require_session
 from aisre.db import Incident
-from aisre.slack import command_is_read_only, command_is_showable
+from aisre.slack import command_block_reason, command_is_read_only, command_is_showable
 
 router = APIRouter(dependencies=[Depends(require_session)])
 
@@ -23,6 +23,8 @@ class ApprovalOut(BaseModel):
 class IncidentDetail(Incident):
     approvals: list[ApprovalOut] = []
     approvable: bool = False
+    # Por que não há botão de aprovação, quando há comando: "controle" | "crase" | "longo".
+    approval_blocked_reason: str | None = None
     # Só um sinal visual (kubectl get/describe/logs/top sem metacaracteres); não autoriza nada.
     command_read_only: bool = False
 
@@ -49,6 +51,11 @@ async def get_incident(incident_id: int, request: Request):
         **incident.model_dump(),
         approvals=[ApprovalOut(user_id=a.user_id, command=a.command) for a in approvals],
         approvable=_approvable(incident),
+        approval_blocked_reason=(
+            command_block_reason(incident.rca.suggested_command)
+            if incident.rca and not incident.rca.unknown and incident.rca.suggested_command
+            else None
+        ),
         command_read_only=bool(
             incident.rca and incident.rca.suggested_command and command_is_read_only(incident.rca.suggested_command)
         ),

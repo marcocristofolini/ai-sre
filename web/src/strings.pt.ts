@@ -32,6 +32,11 @@ export const S = {
     comandoGeradoPorIa: "Atenção: comando gerado por IA a partir de dados não confiáveis; revise antes de executar manualmente.",
     comandoForaListaLeitura:
       "Este comando está fora da lista de comandos somente leitura (kubectl get/describe/logs/top) e pode alterar o cluster.",
+    comandoNaoAprovavel: {
+      controle: "Comando com quebra de linha/caracteres de controle não pode ser aprovado; por isso não há botão de aprovação.",
+      crase: "Comando com crase (`) não pode ser exibido por inteiro nem aprovado; por isso não há botão de aprovação.",
+      longo: "Comando longo demais para ser exibido por inteiro não pode ser aprovado; por isso não há botão de aprovação.",
+    } as Record<string, string>,
     comandoNaoExibivel: "O comando não pode ser exibido por inteiro; por isso não há botão de aprovação.",
     aprovar: "Aprovar",
     aprovando: "Registrando…",

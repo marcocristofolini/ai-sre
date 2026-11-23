@@ -111,6 +111,15 @@ ERRO_SLACK_PAYLOAD = "Payload de ação do Slack inválido."
 ERRO_SLACK_NAO_APROVADOR = "Usuário não autorizado a aprovar."
 ERRO_SLACK_SEM_COMANDO = "O incidente não tem comando sugerido para aprovar."
 SLACK_APROVACAO_REGISTRADA = "Aprovação registrada; nada foi executado."
+SLACK_COMANDO_NAO_APROVAVEL_CONTROLE = (
+    "Comando com quebra de linha/caracteres de controle não pode ser aprovado; por isso não há botão de aprovação."
+)
+SLACK_COMANDO_NAO_APROVAVEL_CRASE = (
+    "Comando com crase (`) não pode ser exibido por inteiro nem aprovado; por isso não há botão de aprovação."
+)
+SLACK_COMANDO_NAO_APROVAVEL_LONGO = (
+    "Comando longo demais para ser exibido por inteiro não pode ser aprovado; por isso não há botão de aprovação."
+)
 SLACK_COMANDO_NAO_EXIBIVEL = "O comando sugerido não pode ser exibido por inteiro e sem alterações; por isso não há botão de aprovação."
 
 # Dashboard: autenticação, risco, placar, integrações

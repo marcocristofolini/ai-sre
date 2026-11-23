@@ -63,6 +63,7 @@ export type Incident = {
 export type IncidentDetail = Incident & {
   approvals: { user_id: string; command: string }[];
   approvable: boolean;
+  approval_blocked_reason?: "controle" | "crase" | "longo" | null;
   command_read_only?: boolean;
 };
 export type RiskRow = { workload: string; state: "aprendendo" | "ativo"; score: number; threshold: number };

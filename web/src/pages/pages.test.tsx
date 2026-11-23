@@ -282,3 +282,16 @@ test("lista de incidentes mostra status e confianca e leva ao detalhe", async ()
   expect(screen.getByText(S.incidentes.status.investigating)).toBeInTheDocument();
   expect(screen.getByRole("link", { name: /HighMemory/ })).toHaveAttribute("href", "#/incidentes/42");
 });
+
+test("comando com quebra de linha explica por que nao ha botao de aprovar", async () => {
+  const inc = incident({
+    approvable: false,
+    approval_blocked_reason: "controle",
+    rca: { cause: "x", confidence: 0.6, evidence, suggested_command: "kubectl get pods\nkubectl get nodes", unknown: false },
+  });
+  mockApi({ ...ME, "GET /incidents": [inc], "GET /incidents/42": inc });
+  window.location.hash = "#/incidentes/42";
+  render(<App />);
+  expect(await screen.findByText(/quebra de linha\/caracteres de controle não pode ser aprovado/)).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: S.incidente.aprovar })).not.toBeInTheDocument();
+});
