@@ -1,6 +1,13 @@
-from aisre.harness.runner import InjectionHandle, run_all
-from aisre.harness.scenarios import SCENARIOS
+import functools
+
+from aisre.harness import runner as _runner
+from aisre.harness.runner import InjectionHandle
+from aisre.harness.scenarios import SCENARIOS, execution_order
 from aisre.schemas import RCA, Evidence
+
+# Sem cluster: a espera da falha (settle) é um no-op nos testes unitários.
+run_all = functools.partial(_runner.run_all, settle=lambda s, k: None)
+ORDER = [s.id for s in execution_order(SCENARIOS)]  # cenários que afetam o nó rodam por último
 
 
 def _fakes():
@@ -27,7 +34,7 @@ def test_run_all_cleans_up_even_when_investigate_raises():
         raise RuntimeError("falha")
 
     run_all(boom, "modelo-x", inject=inject, cleanup=cleanup)
-    assert calls["cleanup"] == [s.id for s in SCENARIOS]
+    assert calls["cleanup"] == ORDER
     assert calls["inject"] == calls["cleanup"]
 
 
@@ -77,7 +84,7 @@ def test_inject_failure_is_recorded_cleaned_up_and_run_continues():
     board = run_all(_unknown, "m", inject=inject, cleanup=cleaned.append)
     assert (board.correct, board.total) == (0, len(SCENARIOS))
     assert board.injection_errors == len(SCENARIOS)
-    assert [h.scenario_id for h in cleaned] == [s.id for s in SCENARIOS]
+    assert [h.scenario_id for h in cleaned] == ORDER
 
 
 def test_cleanup_exception_does_not_abort_run():
@@ -99,13 +106,17 @@ def test_main_exits_nonzero_when_injection_fails(tmp_path, monkeypatch):
 
     monkeypatch.setattr(runner, "inject", failing_inject)
     monkeypatch.setattr(runner, "cleanup", lambda h: None)
+    monkeypatch.setenv("KUBECONFIG", str(tmp_path / "kubeconfig"))
+    monkeypatch.setenv("AISRE_KUBERNETES_ENABLED", "true")  # como no `make eval`
+    monkeypatch.setattr(runner, "current_context", lambda k: runner.KIND_CONTEXT)
+    monkeypatch.setattr(runner, "check_target_cluster", functools.partial(
+        runner.check_target_cluster, context_of=lambda k: runner.KIND_CONTEXT))
     # defaults de run_all foram capturados na definicao; reconstroi via partial
-    import functools
 
     monkeypatch.setattr(
         runner,
         "run_all",
-        functools.partial(runner.run_all, inject=failing_inject, cleanup=lambda h: None),
+        functools.partial(_runner.run_all, inject=failing_inject, cleanup=lambda h: None),
     )
     out = tmp_path / "sb.json"
     assert runner.main([str(out)]) == 1

@@ -29,6 +29,23 @@ export function Precisao() {
                   <dd>{board.model}</dd>
                 </dl>
                 {board.injection_errors > 0 && <p className="muted">{S.precisao.errosInjecao(board.injection_errors)}</p>}
+                {(board.not_measurable ?? 0) > 0 && (
+                  <>
+                    <p className="muted">{S.precisao.naoMediveis(board.not_measurable!)}</p>
+                    <ul className="muted">
+                      {(board.scenarios ?? []).filter((r) => !r.measurable).map((r) => (
+                        <li key={r.scenario_id}>{`${r.scenario_id}: ${r.reason ?? ""}`}</li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+                {(board.timestamp || board.git_commit || board.enabled_tools) && (
+                  <dl className="facts">
+                    {board.timestamp && (<><dt>{S.precisao.medidoEm}</dt><dd>{board.timestamp}</dd></>)}
+                    {board.git_commit && (<><dt>{S.precisao.commit}</dt><dd>{board.git_commit.slice(0, 12)}</dd></>)}
+                    {board.enabled_tools && (<><dt>{S.precisao.ferramentas}</dt><dd>{board.enabled_tools.join(", ") || S.precisao.nenhumaFerramenta}</dd></>)}
+                  </dl>
+                )}
               </div>
               <div className="card">
                 <h2>{S.precisao.calibracao}</h2>

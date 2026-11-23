@@ -76,5 +76,11 @@ export type ScoreboardResponse =
       label: string;
       injection_errors: number;
       calibration: { confidence: number; hit_rate: number }[];
+      // Campos novos (opcionais: placares antigos não os têm).
+      timestamp?: string | null;
+      git_commit?: string | null;
+      enabled_tools?: string[] | null;
+      not_measurable?: number;
+      scenarios?: { scenario_id: string; correct: boolean; confidence: number; measurable: boolean; reason: string | null }[];
     };
 export type Integration = { id: string; configured: boolean; detail: string | null };

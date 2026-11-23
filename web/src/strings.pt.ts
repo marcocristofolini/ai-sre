@@ -69,6 +69,11 @@ export const S = {
     taxaAcerto: "Taxa de acerto",
     errosInjecao: (n: number) => `${n} cenário(s) com erro de injeção`,
     aviso: "Medida em cenários sintéticos de falha injetada, não em produção.",
+    naoMediveis: (n: number) => `${n} cenário(s) não medível(is) neste ambiente (fora do total)`,
+    medidoEm: "Medido em",
+    commit: "Commit",
+    ferramentas: "Ferramentas habilitadas",
+    nenhumaFerramenta: "nenhuma",
   },
   integracoes: {
     titulo: "Integrações",

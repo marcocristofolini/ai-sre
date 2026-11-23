@@ -65,6 +65,21 @@ def test_old_scoreboard_file_without_calibration_still_loads(tmp_path):
     assert client.get("/scoreboard").json()["calibration"] == []
 
 
+def test_scoreboard_with_unmeasurable_scenarios_serves_provenance(tmp_path):
+    board = scoreboard(
+        [GradedResult(scenario_id="a", correct=True, confidence=0.9),
+         GradedResult(scenario_id="b", correct=False, confidence=0.0, measurable=False, reason="não medível")],
+        "m", timestamp="2026-11-23T00:00:00+00:00", git_commit="abc", enabled_tools=["kubernetes"],
+    )
+    path = tmp_path / "s.json"
+    path.write_text(json.dumps(board.model_dump()))
+    client, _ = _client(scoreboard_path=str(path))
+    body = client.get("/scoreboard").json()
+    assert (body["correct"], body["total"], body["not_measurable"]) == (1, 1, 1)
+    assert body["git_commit"] == "abc" and body["enabled_tools"] == ["kubernetes"]
+    assert [r["measurable"] for r in body["scenarios"]] == [True, False]
+
+
 # --- /integrations ---
 def test_integrations_status_never_exposes_secrets():
     client, _ = _client(

@@ -56,6 +56,28 @@ test("Precisao mostra rotulo cenarios sinteticos e o modelo", async () => {
   expect(screen.getByText(/80%/)).toBeInTheDocument(); // calibração
 });
 
+test("Precisao mostra cenarios nao mediveis com motivo e a procedencia do placar", async () => {
+  mockApi({
+    ...ME,
+    "GET /scoreboard": {
+      measured: true, correct: 1, total: 4, model: "m", injection_errors: 0, label: "cenários sintéticos",
+      calibration: [], timestamp: "2026-11-23T12:00:00+00:00", git_commit: "abcdef1234567890",
+      enabled_tools: ["kubernetes"], not_measurable: 1,
+      scenarios: [
+        { scenario_id: "oom-kill", correct: true, confidence: 0.9, measurable: true, reason: null },
+        { scenario_id: "dns-failure", correct: false, confidence: 0, measurable: false, reason: "não medível neste ambiente: requer uma destas ferramentas habilitadas: loki" },
+      ],
+    },
+  });
+  window.location.hash = "#/precisao";
+  render(<App />);
+  expect(await screen.findByText("1/4")).toBeInTheDocument();
+  expect(screen.getByText(S.precisao.naoMediveis(1))).toBeInTheDocument();
+  expect(screen.getByText(/dns-failure: não medível neste ambiente/)).toBeInTheDocument();
+  expect(screen.getByText("abcdef123456")).toBeInTheDocument();
+  expect(screen.getByText("kubernetes")).toBeInTheDocument();
+});
+
 test("Precisao sem medicao mostra 'sem medicao ainda' e nenhum numero", async () => {
   mockApi({ ...ME, "GET /scoreboard": { measured: false, reason: "missing" } });
   window.location.hash = "#/precisao";

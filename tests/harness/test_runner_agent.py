@@ -9,7 +9,7 @@ from aisre import strings_pt as t
 from aisre.config import Settings
 from aisre.harness import runner
 from aisre.harness.runner import InjectionHandle, run_all
-from aisre.harness.scenarios import SCENARIOS
+from aisre.harness.scenarios import SCENARIOS, execution_order
 from aisre.llm.base import LLMResponse, ToolCall
 from aisre.llm.gate import ConsentRequired
 from aisre.tools.base import ToolResult
@@ -53,8 +53,13 @@ class FakeLLM:
         })])
 
 
+# Com só a ferramenta kubernetes (FakeK8s), os cenários que exigem Prometheus/Loki/GitHub
+# saem do total como "não medível" e nem são injetados.
+MEASURED = [s for s in execution_order(SCENARIOS) if "kubernetes" in s.required_tools()]
+
+
 @pytest.fixture
-def harness(monkeypatch):
+def harness(monkeypatch, tmp_path):
     """Substitui cluster, provedor e ferramentas por falsos; devolve o estado observado."""
     state = {"settings": [], "cleanup": [], "llm": FakeLLM(), "tools": [FakeK8s()]}
     monkeypatch.delenv("AISRE_EVAL_AGENT", raising=False)
@@ -73,9 +78,15 @@ def harness(monkeypatch):
 
     monkeypatch.setattr(runner, "build_provider", provider)
     monkeypatch.setattr(runner, "build_tools", tools)
+    monkeypatch.setenv("KUBECONFIG", str(tmp_path / "kubeconfig"))
+    monkeypatch.setattr(runner, "current_context", lambda k: runner.KIND_CONTEXT)
+    monkeypatch.setattr(runner, "check_target_cluster", functools.partial(
+        runner.check_target_cluster, context_of=lambda k: runner.KIND_CONTEXT))
+    monkeypatch.setattr(runner, "git_commit", lambda: "abc123")
     monkeypatch.setattr(
         runner, "run_all",
-        functools.partial(run_all, inject=inject, cleanup=lambda h: state["cleanup"].append(h.scenario_id)),
+        functools.partial(run_all, inject=inject, settle=lambda s, k: None,
+                          cleanup=lambda h: state["cleanup"].append(h.scenario_id)),
     )
     return state
 
@@ -93,15 +104,16 @@ def test_agent_mode_builds_provider_and_tools_from_settings_and_investigates(
     assert runner.main(argv) == 0
     board = json.loads(out.read_text())
     # só o cenário de OOM tem a causa que o LLM falso sempre responde
-    assert (board["correct"], board["total"]) == (1, len(SCENARIOS))
+    assert (board["correct"], board["total"]) == (1, len(MEASURED))
+    assert board["not_measurable"] == len(SCENARIOS) - len(MEASURED)
     assert board["model"] == "fake:modelo-teste"
-    # provedor: 1 validação + 1 por cenário; ferramentas: 1
-    assert len(harness["settings"]) == 2 + len(SCENARIOS)
+    # provedor: 1 validação + 1 por cenário medido; ferramentas: 1
+    assert len(harness["settings"]) == 2 + len(MEASURED)
     assert all(isinstance(s, Settings) for s in harness["settings"])
     namespaces = [c["namespace"] for c in harness["tools"][0].calls]
-    assert namespaces == [s.namespace for s in SCENARIOS]
+    assert namespaces == [s.namespace for s in MEASURED]
     # o alerta entregue ao agente não traz a causa esperada nem o rótulo da falha
-    for alert_text, s in zip(harness["llm"].alerts, SCENARIOS, strict=True):
+    for alert_text, s in zip(harness["llm"].alerts, MEASURED, strict=True):
         assert s.expected_cause not in alert_text
         assert f"alerta: {runner.EVAL_ALERT_NAME}" in alert_text
         assert "fault" not in alert_text
@@ -122,7 +134,7 @@ def test_agent_mode_consent_required_aborts_with_message_and_cleans_up(harness, 
     harness["llm"] = FakeLLM(error=ConsentRequired())
     assert runner.main([str(tmp_path / "sb.json"), "--agent"]) == 2
     assert t.ERRO_CONSENTIMENTO_LLM in capsys.readouterr().err
-    assert harness["cleanup"] == [SCENARIOS[0].id]
+    assert harness["cleanup"] == [MEASURED[0].id]
 
 
 def test_agent_mode_provider_config_error_exits_with_message(harness, tmp_path, capsys, monkeypatch):
@@ -143,7 +155,7 @@ def test_run_all_propagates_consent_required_after_cleanup():
 
     with pytest.raises(ConsentRequired):
         run_all(
-            investigate, "m",
+            investigate, "m", settle=lambda s, k: None,
             inject=lambda s, k: InjectionHandle(scenario_id=s.id, kubeconfig=k),
             cleanup=lambda h: cleaned.append(h.scenario_id),
         )
@@ -180,12 +192,12 @@ def test_agent_mode_never_reuses_a_provider_across_event_loops(harness, monkeypa
     assert runner.main([str(out), "--agent"]) == 0
     board = json.loads(out.read_text())
     assert board["correct"] == 1  # oom-kill não virou "não sei" por erro de loop
-    assert len(harness["tools"][0].calls) == len(SCENARIOS)
+    assert len(harness["tools"][0].calls) == len(MEASURED)
 
 
 def test_alert_and_namespace_do_not_reveal_the_scenario(harness, tmp_path):
     assert runner.main([str(tmp_path / "sb.json"), "--agent"]) == 0
-    for alert_text, s in zip(harness["llm"].alerts, SCENARIOS, strict=True):
+    for alert_text, s in zip(harness["llm"].alerts, MEASURED, strict=True):
         assert f"namespace: {s.namespace}" in alert_text
         for word in [s.id, s.fault, s.expected_cause, *s.id.split("-"), *s.fault.split("-")]:
             if len(word) > 3:

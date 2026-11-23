@@ -32,6 +32,18 @@ EVIDENCIA_COLETADA_SEM_CONCLUSAO = "Consulta executada com sucesso; dados coleta
 EVIDENCIA_CONSULTA_FALHOU = "Consulta falhou: {erro}"
 ERRO_FERRAMENTA_SEM_DETALHE = "erro não informado"
 ERRO_EVAL_CONFIGURACAO = "erro de configuração do agente no harness: {detalhe}"
+EVAL_NAO_MEDIVEL = "não medível neste ambiente: requer uma destas ferramentas habilitadas: {ferramentas}"
+EVAL_NAO_MANIFESTOU = "a falha injetada não se manifestou em {segundos}s"
+EVAL_NAO_NORMALIZOU = "o cluster não voltou ao normal em {segundos}s depois do cleanup"
+EVAL_INJECAO_FALHOU = "a injeção da falha falhou ({tipo})"
+ERRO_EVAL_KUBECONFIG_VAZIO = (
+    "KUBECONFIG vazio: o harness se recusa a usar o contexto padrão (poderia injetar falhas em produção). "
+    "Use `make eval` (cluster kind dedicado)."
+)
+ERRO_EVAL_CONTEXTO = (
+    "o contexto atual do kubeconfig é '{atual}', não '{esperado}': o harness só injeta falhas no cluster kind "
+    "dedicado. Para outro cluster (por sua conta e risco) use --allow-non-kind."
+)
 AVISO_LLM_FALHA_INVESTIGACAO = "falha do provedor de LLM durante a investigação ({tipo}); resultado: não sei"
 
 # API, armazenamento e memória
