@@ -88,3 +88,35 @@ def test_build_provider_unknown_raises():
 
 def test_consent_message_has_no_secret():
     assert "sk-x" not in str(ConsentRequired())
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://localhost:11434",
+        "http://127.0.0.1:8000",
+        "http://10.1.2.3:8000",
+        "http://192.168.0.5",
+        "http://169.254.1.1",
+        "http://ollama:11434",
+        "http://llm.ns.svc:8000",
+        "http://llm.ns.svc.cluster.local:8000",
+        "http://[::1]:8000",
+    ],
+)
+def test_local_provider_internal_url_needs_no_consent(url):
+    p = build_provider(_settings(False, llm_provider="local", llm_base_url=url))
+    assert p.is_external is False
+
+
+@pytest.mark.parametrize("url", ["https://api.openai.com", "https://gateway.example.com/x", "http://8.8.8.8", "not a url"])
+def test_local_provider_hosted_url_requires_consent(url):
+    p = build_provider(_settings(False, llm_provider="local", llm_base_url=url))
+    assert p.is_external is True
+    with pytest.raises(ConsentRequired):
+        asyncio.run(p.complete([Message(role="user", content="oi")], []))
+
+
+def test_local_provider_hosted_url_with_consent_passes_gate():
+    p = build_provider(_settings(True, llm_provider="local", llm_base_url="https://api.openai.com"))
+    assert p.is_external is True  # passa pelo portão; a chamada real não é feita aqui

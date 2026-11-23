@@ -61,3 +61,50 @@ def test_redact_json_keeps_structure():
 )
 def test_redact_leaves_ordinary_text(text):
     assert redact(text) == text
+
+
+LEAKS = [
+    ("Authorization: Basic dXNlcjpwYXNz", "dXNlcjpwYXNz"),
+    ("-----BEGIN RSA PRIVATE KEY-----\nMIIEabc\ndef==\n-----END RSA PRIVATE KEY-----", "MIIEabc"),
+    ("-----BEGIN PRIVATE KEY-----\nMIIEtruncado", "MIIEtruncado"),
+    ("password: hunter2", "hunter2"),
+    ("password:hunter2", "hunter2"),
+    ("token: abcdef123", "abcdef123"),
+    ("data:\n  password: aHVudGVyMg==\n  user: x", "aHVudGVyMg=="),
+    ("redis://:s3cret@redis:6379", "s3cret"),
+    ('password="hunter 2 spaces"', "spaces"),
+    ('DB_PASSWORD="correct horse battery"', "horse"),
+    ("password='um dois tres'", "dois"),
+    ('{"password": "a\\"b"}', 'b"'),
+    ("mysql://user:p@ss@host/db", "ss@host"),
+    ('{"token": 12345}', "12345"),
+    ("x-api-key: abc", "abc"),
+    ("Cookie: session=abcdef; other=1", "abcdef"),
+    ("Set-Cookie: sid=zzz999; Path=/", "zzz999"),
+    ("private_key=abcdefgh", "abcdefgh"),
+    ("sk-ant-api03-" + "A1b2C3d4" * 4, "A1b2C3d4"),
+]
+
+
+@pytest.mark.parametrize("text,secret", LEAKS)
+def test_redact_previously_leaking_forms(text, secret):
+    out = redact(text)
+    assert secret not in out
+    assert t.MARCADOR_REDIGIDO in out
+    assert redact(out) == out
+
+
+def test_redact_keeps_surrounding_structure():
+    assert "db" in redact("mysql://user:p@ss@host/db") and "user" in redact("redis://user:x@h")
+    assert redact("password reset enviado; token expirado") == "password reset enviado; token expirado"
+    assert redact("Basic setup of the cluster") == "Basic setup of the cluster"
+    assert redact("data:\n  user: marco") == "data:\n  user: marco"
+
+
+def test_redact_no_catastrophic_backtracking():
+    import time
+
+    for text in ["a" * 50000, "password" * 5000, "\\" * 50000, 'password="' + "\\" * 50000, "x://" + "a:" * 20000]:
+        start = time.perf_counter()
+        redact(text)
+        assert time.perf_counter() - start < 2

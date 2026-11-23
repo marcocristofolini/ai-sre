@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import ipaddress
 import json
+from urllib.parse import urlparse
 
 import httpx
 
@@ -25,9 +27,21 @@ def to_openai_messages(messages: list[Message]) -> list[dict]:
     return out
 
 
+def is_local_url(url: str) -> bool:
+    """True só se o destino está dentro do ambiente: loopback, rede privada/link-local,
+    nome sem ponto (compose/k8s) ou sufixos *.svc, *.cluster.local, *.local, *.localhost."""
+    host = (urlparse(url).hostname or "").lower().rstrip(".")
+    if not host:
+        return False
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return "." not in host or host.endswith((".svc", ".cluster.local", ".local", ".localhost"))
+    return ip.is_loopback or ip.is_private or ip.is_link_local
+
+
 class LocalProvider:
     name = "local"
-    is_external = False
 
     def __init__(
         self,
@@ -37,6 +51,8 @@ class LocalProvider:
         timeout: float = 120,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
+        # O destino real decide: um gateway hospedado exige consentimento.
+        self.is_external = not is_local_url(base_url)
         self._url = base_url.rstrip("/") + "/v1/chat/completions"
         self._model = model
         self._headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
