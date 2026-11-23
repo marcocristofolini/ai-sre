@@ -9,13 +9,22 @@ from psycopg.types.json import Jsonb
 from psycopg_pool import AsyncConnectionPool
 
 from aisre.agent.loop import Alert
-from aisre.db import Incident, MemoryRow, fingerprint
+from aisre.db import Approval, Incident, MemoryRow, fingerprint
 from aisre.schemas import RCA
 
 _INCIDENT_COLS = (
     "i.id, i.fingerprint, i.alert_name, i.labels, i.fired_at, i.created_at, i.status, i.error, r.data AS rca"
 )
 _INCIDENT_FROM = "FROM incidents i LEFT JOIN rcas r ON r.incident_id = i.id"
+
+
+def read_migrations() -> list[tuple[str, str]]:
+    """Migrações empacotadas, em ordem de nome (0001_..., 0002_...)."""
+    files = sorted(
+        (f for f in resources.files("aisre").joinpath("migrations").iterdir() if f.name.endswith(".sql")),
+        key=lambda f: f.name,
+    )
+    return [(f.name, f.read_text(encoding="utf-8")) for f in files]
 
 
 def read_migration() -> str:
@@ -45,7 +54,8 @@ class PostgresStore:
     async def migrate(self) -> None:
         """Idempotente (CREATE ... IF NOT EXISTS)."""
         async with self._pool.connection() as conn:
-            await conn.execute(read_migration())
+            for _name, sql in read_migrations():
+                await conn.execute(sql)
 
     async def create_if_new(self, alert: Alert, window_seconds: int) -> tuple[Incident, bool]:
         fp = fingerprint(alert.name, alert.labels)
@@ -115,6 +125,30 @@ class PostgresStore:
                 f"SELECT {_INCIDENT_COLS} {_INCIDENT_FROM} ORDER BY i.id DESC LIMIT %s", (limit,)
             )
             return [_incident(r) for r in await cur.fetchall()]
+
+    async def record_approval(self, incident_id: int, user_id: str, command: str) -> Approval:
+        async with self._pool.connection() as conn:
+            async with conn.transaction():
+                await conn.execute(
+                    "INSERT INTO approvals (incident_id, user_id, command) VALUES (%s, %s, %s) "
+                    "ON CONFLICT (incident_id, user_id) DO NOTHING",
+                    (incident_id, user_id, command),
+                )
+                cur = await conn.execute(
+                    "SELECT incident_id, user_id, command, at FROM approvals "
+                    "WHERE incident_id = %s AND user_id = %s",
+                    (incident_id, user_id),
+                )
+                return Approval(**await cur.fetchone())
+
+    async def list_approvals(self, incident_id: int) -> list[Approval]:
+        async with self._pool.connection() as conn:
+            cur = await conn.execute(
+                "SELECT incident_id, user_id, command, at FROM approvals "
+                "WHERE incident_id = %s ORDER BY at, user_id",
+                (incident_id,),
+            )
+            return [Approval(**r) for r in await cur.fetchall()]
 
     async def add_memory(
         self, incident_id: int, content: str, rca: RCA, embedding: list[float]

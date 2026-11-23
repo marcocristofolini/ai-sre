@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 
 from aisre import strings_pt as t
 from aisre.agent.loop import Alert, investigate
@@ -45,6 +45,7 @@ async def run_investigation(
     memory: Memory,
     timeout_seconds: int,
     semaphore: asyncio.Semaphore | None = None,
+    extra_hooks: Sequence[hooks.RcaHook] = (),
 ) -> None:
     """Falhas (inclusive do armazenamento) são registradas e engolidas; só o cancelamento
     propaga, depois de marcar o incidente como falho."""
@@ -83,7 +84,7 @@ async def run_investigation(
             await memory.save(incident_id, rca)
         except Exception as exc:  # noqa: BLE001
             log.warning(t.AVISO_MEMORIA_FALHOU.format(tipo=type(exc).__name__))
-    for hook in list(hooks.on_rca_ready):
+    for hook in [*hooks.on_rca_ready, *extra_hooks]:
         try:
             await hook(incident_id, rca)
         except Exception as exc:  # noqa: BLE001

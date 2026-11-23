@@ -118,6 +118,7 @@ async def webhook(request: Request, background: BackgroundTasks):
                 app.state.memory,
                 settings.investigation_timeout_seconds,
                 app.state.investigation_semaphore,
+                app.state.rca_hooks,
             )
         results.append({"incident_id": incident.id, "duplicate": not created})
     if store_failed:

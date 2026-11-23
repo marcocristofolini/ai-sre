@@ -4,14 +4,16 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 
+import httpx
 from fastapi import FastAPI
 
 from aisre import strings_pt as t
-from aisre.api import routes_alerts, routes_incidents
+from aisre.api import routes_alerts, routes_incidents, routes_slack
 from aisre.api.ingest import Investigator, default_investigator
 from aisre.config import Settings
 from aisre.db import MemoryStore, Store
 from aisre.memory import Memory
+from aisre.slack import make_hook
 
 log = logging.getLogger(__name__)
 
@@ -20,6 +22,7 @@ def create_app(
     settings: Settings | None = None,
     store: Store | None = None,
     investigator: Investigator | None = None,
+    slack_transport: httpx.AsyncBaseTransport | None = None,
 ) -> FastAPI:
     settings = settings or Settings()
     if store is None:
@@ -58,6 +61,9 @@ def create_app(
     app.state.store = store
     app.state.memory = Memory(store)
     app.state.investigator = investigator or default_investigator(settings)
+    # Registro por app (não global): cada app publica no Slack com a sua configuração.
+    app.state.rca_hooks = [make_hook(settings, slack_transport)]
     app.include_router(routes_alerts.router)
     app.include_router(routes_incidents.router)
+    app.include_router(routes_slack.router)
     return app

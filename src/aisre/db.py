@@ -29,6 +29,13 @@ class Incident(BaseModel):
     rca: RCA | None = None
 
 
+class Approval(BaseModel):
+    incident_id: int
+    user_id: str
+    command: str
+    at: datetime
+
+
 class MemoryRow(BaseModel):
     incident_id: int
     content: str
@@ -60,6 +67,11 @@ class Store(Protocol):
     async def list(self, limit: int = 100) -> list[Incident]:
         """Mais recentes primeiro."""
 
+    async def record_approval(self, incident_id: int, user_id: str, command: str) -> Approval:
+        """Idempotente por (incidente, usuário): numa repetição devolve a aprovação existente."""
+
+    async def list_approvals(self, incident_id: int) -> list[Approval]: ...
+
     async def add_memory(
         self, incident_id: int, content: str, rca: RCA, embedding: list[float]
     ) -> None: ...
@@ -82,6 +94,7 @@ class MemoryStore:
         self._clock = clock or (lambda: datetime.now(UTC))
         self._incidents: dict[int, Incident] = {}
         self._memories: list[tuple[MemoryRow, list[float]]] = []
+        self._approvals: dict[tuple[int, str], Approval] = {}
         self._lock = asyncio.Lock()
 
     async def create_if_new(self, alert: Alert, window_seconds: int) -> tuple[Incident, bool]:
@@ -125,6 +138,19 @@ class MemoryStore:
     async def list(self, limit: int = 100) -> list[Incident]:
         ordered = sorted(self._incidents.values(), key=lambda i: i.id, reverse=True)
         return [i.model_copy(deep=True) for i in ordered[:limit]]
+
+    async def record_approval(self, incident_id: int, user_id: str, command: str) -> Approval:
+        async with self._lock:
+            key = (incident_id, user_id)
+            if key not in self._approvals:
+                self._approvals[key] = Approval(
+                    incident_id=incident_id, user_id=user_id, command=command, at=self._clock()
+                )
+            return self._approvals[key].model_copy()
+
+    async def list_approvals(self, incident_id: int) -> list[Approval]:
+        rows = [a for (i, _), a in self._approvals.items() if i == incident_id]
+        return [a.model_copy() for a in sorted(rows, key=lambda a: (a.at, a.user_id))]
 
     async def add_memory(
         self, incident_id: int, content: str, rca: RCA, embedding: list[float]

@@ -14,6 +14,10 @@ class Settings(BaseSettings):
     prometheus_url: str = ""
     loki_url: str = ""
     slack_approvers: list[str] = Field(default_factory=list)
+    slack_bot_token: SecretStr | None = None
+    slack_signing_secret: SecretStr | None = None
+    slack_channel: str = ""
+    slack_api_url: str = "https://slack.com/api"
     tool_timeout_seconds: int = 10
     github_token: SecretStr = SecretStr("")
     github_repo: str = ""
