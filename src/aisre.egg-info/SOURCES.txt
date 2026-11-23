@@ -1,0 +1,7 @@
+pyproject.toml
+src/aisre.egg-info/PKG-INFO
+src/aisre.egg-info/SOURCES.txt
+src/aisre.egg-info/dependency_links.txt
+src/aisre.egg-info/requires.txt
+src/aisre.egg-info/top_level.txt
+tests/test_schemas.py

@@ -1,0 +1,9 @@
+Metadata-Version: 2.4
+Name: aisre
+Version: 0.1.0
+Summary: AI SRE: análise de causa raiz de incidentes com evidências
+Requires-Python: >=3.12
+Requires-Dist: pydantic>=2.6
+Requires-Dist: pydantic-settings>=2.2
+Provides-Extra: dev
+Requires-Dist: pytest>=8; extra == "dev"
