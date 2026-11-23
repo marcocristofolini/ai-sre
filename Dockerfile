@@ -2,6 +2,11 @@
 # toda configuração entra por variáveis AISRE_* em tempo de execução.
 # Build (a partir da raiz do repositório): docker build -t aisre:0.1.0 .
 
+# Digests: as imagens base abaixo usam só tag (não foi possível resolver digests sem rede; nenhum foi inventado).
+# Para fixar por digest em um ambiente com rede:
+#   docker buildx imagetools inspect node:22-slim        # copie "Digest: sha256:..."
+#   docker buildx imagetools inspect python:3.12-slim
+# e troque por `FROM node:22-slim@sha256:<digest> AS web` / `FROM python:3.12-slim@sha256:<digest> AS runtime`.
 FROM node:22-slim AS web
 WORKDIR /web
 COPY web/package.json web/package-lock.json ./
