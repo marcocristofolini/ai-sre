@@ -24,7 +24,7 @@ aprovação e um módulo preditivo (Isolation Forest sobre métricas do Promethe
   semântico) e não foi avaliado quanto à utilidade. Notas de resolução não são armazenadas; 
   runbooks: não implementado (fora do escopo da v1).
 - Os testes de integração com Postgres (`tests/test_db_postgres.py`) rodam só com `AISRE_TEST_DATABASE_URL`.
-- Licença: Apache-2.0 (veja `LICENSE`).
+- Licença: Apache-2.0 (veja `LICENSE` e `NOTICE`; copyright 2026 Marco Fabricio Cristofolini).
 
 ## Segurança em uma página
 
@@ -111,12 +111,5 @@ Precisam de infraestrutura real (nada disto foi verificado):
 
 Decisões do dono do projeto:
 
-- Mesclar a branch `feat/ai-sre-v1`; publicar (ou não) `docs/superpowers/` (especificação e plano).
 - Primeiro usuário real e modelo de monetização.
 - Referências visuais (Sherlocks) para o dashboard.
-- Titular do copyright no apêndice da Apache-2.0 (o `LICENSE` é o texto padrão, sem nome preenchido).
-
-## Documentos
-
-- Especificação: `docs/superpowers/specs/2026-11-23-ai-sre-product-design.md`
-- Plano: `docs/superpowers/plans/2026-11-23-ai-sre-product.md`
