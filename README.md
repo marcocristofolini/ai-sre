@@ -26,6 +26,95 @@ aprovação e um módulo preditivo (Isolation Forest sobre métricas do Promethe
 - Os testes de integração com Postgres (`tests/test_db_postgres.py`) rodam só com `AISRE_TEST_DATABASE_URL`.
 - Licença: Apache-2.0 (veja `LICENSE` e `NOTICE`; copyright 2026 Marco Fabricio Cristofolini).
 
+## Screenshots
+
+Dashboard real (React, servido pela API), rodando com **dados de demonstração** sintéticos gerados por
+[`scripts/demo_server.py`](scripts/demo_server.py) (`.venv/bin/python scripts/demo_server.py`, com `web/dist` construído).
+Os incidentes, RCAs e séries são inventados e rotulados "dados de demonstração". **Não existe nenhuma medição de
+precisão**: a captura da página Precisão mostra justamente o estado "Sem medição ainda".
+
+| | |
+|---|---|
+| ![Login](docs/screenshots/01-login.png) <br> Login local | ![Incidentes](docs/screenshots/02-incidentes.png) <br> Lista de incidentes |
+| ![RCA com evidências](docs/screenshots/03-incidente-rca.png) <br> RCA com evidências, comando sugerido, aviso de "gerado por IA" e botão Aprovar (só registra) | ![Não sei](docs/screenshots/04-incidente-nao-sei.png) <br> "Não sei a causa", com as evidências coletadas |
+| ![Risco](docs/screenshots/05-risco.png) <br> Risco preditivo (um detector "aprendendo", outro "ativo") | ![Precisão](docs/screenshots/06-precisao.png) <br> Precisão: "Sem medição ainda" |
+| ![Integrações](docs/screenshots/07-integracoes.png) <br> Integrações (só o Prometheus, falso, está configurado na demo) | |
+
+## Arquitetura
+
+![Arquitetura do AI SRE](docs/architecture.svg)
+
+Mesmo fluxo em Mermaid (renderizado pelo GitHub):
+
+```mermaid
+flowchart TD
+    AM["Alertmanager / Prometheus<br/>alerta"] -->|"POST /alerts/webhook<br/>Authorization: Bearer"| Q["Dedupe + fila de investigação"]
+    subgraph PRED["Ramo preditivo"]
+        PM["Prometheus<br/>séries por workload"] --> IF["Isolation Forest<br/>por workload"]
+        IF -->|"estado ativo e score > limiar"| SCH["Agendador"]
+    end
+    SCH -->|"abre investigação"| Q
+    Q --> AG
+    subgraph AG["Loop do agente"]
+        LLM["Provedor LLM<br/>gate de consentimento + redação"]
+        TOOLS["Ferramentas somente leitura<br/>Kubernetes, Prometheus, Loki, GitHub"]
+        MEM["Memória de incidentes passados<br/>contexto NÃO confiável"]
+        LLM <--> TOOLS
+        MEM --> LLM
+    end
+    AG --> VAL["Validação do RCA<br/>ids de evidência, teto de confiança, 'não sei'"]
+    VAL --> ST[("Store<br/>Postgres + pgvector")]
+    ST --> SL["Slack<br/>botão Aprovar só registra"]
+    ST --> DASH["Dashboard React<br/>Incidentes, Risco, Precisão, Integrações"]
+    subgraph HAR["Harness (make eval)"]
+        K["Cluster kind"] --> F["Falhas injetadas"] --> G["Investigação + correção"] --> SB["eval/scoreboard.json"]
+    end
+    G -.->|"mesmo loop"| AG
+    SB --> DASH
+```
+
+Passo a passo:
+
+1. O Alertmanager (ou o agendador preditivo) cria um incidente. O webhook exige token Bearer; alertas repetidos dentro
+   da janela de deduplicação reaproveitam o incidente, e a fila de investigações é limitada.
+2. O agente conversa com o LLM. Cada texto enviado passa pelo gate de consentimento (provedor externo só com consentimento
+   explícito) e pela redação de segredos. O LLM só pode chamar ferramentas **somente leitura** (Kubernetes, Prometheus,
+   Loki, GitHub). Incidentes anteriores parecidos entram como contexto não confiável, sem id citável.
+3. A resposta é validada: só vale citar ids de evidências realmente consultadas; com uma única evidência a confiança tem teto
+   (0,6); sem evidência suficiente o resultado é "não sei".
+4. O RCA vai para o Store (Postgres com pgvector; em memória se `AISRE_DATABASE_URL` não existir) e é entregue no Slack
+   e no dashboard. O botão **Aprovar** (Slack ou dashboard) apenas registra quem aprovou o comando sugerido.
+5. Ramo preditivo: um Isolation Forest por workload aprende o histórico do Prometheus ("aprendendo") e, quando "ativo",
+   o agendador abre uma investigação se o score passar do limiar. Ramo do harness: `make eval` injeta falhas num cluster
+   `kind`, corrige cada cenário e escreve `eval/scoreboard.json`, que a página Precisão lê (sem arquivo: "Sem medição ainda").
+   Nenhum dos dois ramos foi verificado em ambiente real (veja "Estado atual").
+
+### Princípios de segurança
+
+- **Somente leitura**: as ferramentas só leem; o produto sugere comandos, nunca os executa.
+- **Consentimento padrão `false`** para qualquer LLM externo (`AISRE_LLM_EXTERNAL_CONSENT`).
+- **Redação** de segredos em tudo que sai para o LLM.
+- **Dados não confiáveis delimitados**: conteúdo do alerta, saídas de ferramentas e memória de incidentes são tratados como
+  dado, não como instrução.
+- **Só cita evidência consultada**: ids opacos das consultas; citação sem id válido é descartada, sem evidência citável o resultado é "não sei" e a confiança tem teto.
+- **Aprovação registrada, não executada**: tanto no Slack quanto no dashboard, com aviso de que o comando vem de um LLM.
+
+### Mapa de componentes
+
+| Caminho | O que é |
+|---|---|
+| `src/aisre/api/` | FastAPI: webhook, incidentes, risco, placar, integrações, Slack, login; serve `web/dist` |
+| `src/aisre/agent/` | Laço de investigação e prompts |
+| `src/aisre/llm/` | Provedores (Anthropic, local), gate de consentimento, redação |
+| `src/aisre/tools/` | Ferramentas somente leitura: Kubernetes, Prometheus, Loki, GitHub |
+| `src/aisre/predict/` | Detector Isolation Forest, agendador e ligação com o app |
+| `src/aisre/db.py`, `db_postgres.py`, `memory.py`, `migrations/` | Store (memória/Postgres + pgvector) e memória de incidentes |
+| `src/aisre/slack.py` | Mensagem no Slack e botão de aprovação |
+| `src/aisre/harness/`, `harness/`, `eval/` | Cenários sintéticos, correção, manifests e scripts do `kind`; `eval/scoreboard.json` (gerado) |
+| `web/` | Dashboard React (Incidentes, Risco, Precisão, Integrações) |
+| `deploy/helm/aisre/` | Chart Helm |
+| `scripts/demo_server.py` | Servidor de demonstração com dados sintéticos |
+
 ## Segurança em uma página
 
 - `/alerts/webhook` exige `Authorization: Bearer <AISRE_WEBHOOK_TOKEN>`; sem token configurado, responde `503`
