@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import logging
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
@@ -28,7 +30,30 @@ def create_app(
         else:
             log.warning(t.AVISO_STORE_EM_MEMORIA)
             store = MemoryStore()
-    app = FastAPI(title="aisre")
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        # Armazenamentos com ciclo de vida (Postgres) expõem open/migrate/close.
+        opener = getattr(store, "open", None)
+        if opener:
+            await opener()
+        try:
+            migrate = getattr(store, "migrate", None)
+            if migrate:
+                await migrate()
+            n = await store.fail_stale(
+                settings.investigation_timeout_seconds, t.ERRO_INVESTIGACAO_INTERROMPIDA
+            )
+            if n:
+                log.warning(t.AVISO_INCIDENTES_ORFAOS.format(n=n))
+            yield
+        finally:
+            closer = getattr(store, "close", None)
+            if closer:
+                await closer()
+
+    app = FastAPI(title="aisre", lifespan=lifespan)
+    app.state.investigation_semaphore = asyncio.Semaphore(max(1, settings.max_concurrent_investigations))
     app.state.settings = settings
     app.state.store = store
     app.state.memory = Memory(store)

@@ -18,6 +18,7 @@ def test_postgres_store_roundtrip_dedupe_and_similarity():
 
     async def run():
         store = PostgresStore(DSN)
+        await store.open()
         await store.migrate()
         alert = Alert(name=f"A{os.getpid()}", labels={"s": "x"}, fired_at=datetime.now(UTC))
         inc, created = await store.create_if_new(alert, 300)
@@ -29,5 +30,6 @@ def test_postgres_store_roundtrip_dedupe_and_similarity():
         memory = Memory(store)
         await memory.save(inc.id, rca)
         assert (await memory.similar("OOM oom", k=1))[0].incident_id == inc.id
+        await store.close()
 
     asyncio.run(run())

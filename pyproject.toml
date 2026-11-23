@@ -16,10 +16,14 @@ dependencies = [
     "fastapi>=0.110",
     "uvicorn>=0.29",
     "psycopg[binary]>=3.1",
+    "psycopg-pool>=3.2",
 ]
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
+
+[tool.setuptools.package-data]
+aisre = ["migrations/*.sql"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

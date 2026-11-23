@@ -30,6 +30,13 @@ def default_investigator(settings: Settings) -> Investigator:
     return run
 
 
+async def _record_failure(store: Store, incident_id: int, message: str) -> None:
+    try:
+        await store.fail(incident_id, message)
+    except Exception as exc:  # noqa: BLE001 - só o tipo: a mensagem pode conter segredos
+        log.warning(t.AVISO_STORE_FALHOU.format(id=incident_id, tipo=type(exc).__name__))
+
+
 async def run_investigation(
     incident_id: int,
     alert: Alert,
@@ -37,23 +44,40 @@ async def run_investigation(
     investigator: Investigator,
     memory: Memory,
     timeout_seconds: int,
+    semaphore: asyncio.Semaphore | None = None,
 ) -> None:
-    """Nunca levanta: qualquer falha é registrada no incidente."""
+    """Falhas (inclusive do armazenamento) são registradas e engolidas; só o cancelamento
+    propaga, depois de marcar o incidente como falho."""
     try:
-        rca = await asyncio.wait_for(investigator(alert), timeout=timeout_seconds)
+        if semaphore is None:
+            rca = await asyncio.wait_for(investigator(alert), timeout=timeout_seconds)
+        else:
+            async with semaphore:  # a espera na fila não conta no tempo limite
+                rca = await asyncio.wait_for(investigator(alert), timeout=timeout_seconds)
+    except asyncio.CancelledError:
+        await _record_failure(store, incident_id, t.ERRO_INVESTIGACAO_INTERROMPIDA)
+        raise
     except ConsentRequired:
         log.error(t.ERRO_INVESTIGACAO_CONSENTIMENTO)
-        await store.fail(incident_id, t.ERRO_INVESTIGACAO_CONSENTIMENTO)
+        await _record_failure(store, incident_id, t.ERRO_INVESTIGACAO_CONSENTIMENTO)
         return
     except TimeoutError:
-        await store.fail(incident_id, t.ERRO_INVESTIGACAO_TIMEOUT.format(segundos=timeout_seconds))
+        await _record_failure(
+            store, incident_id, t.ERRO_INVESTIGACAO_TIMEOUT.format(segundos=timeout_seconds)
+        )
         return
     except Exception as exc:  # noqa: BLE001 - só o tipo: a mensagem pode conter segredos
         msg = t.ERRO_INVESTIGACAO_FALHOU.format(tipo=type(exc).__name__)
         log.warning(msg)
-        await store.fail(incident_id, msg)
+        await _record_failure(store, incident_id, msg)
         return
-    await store.complete(incident_id, rca)
+    try:
+        await store.complete(incident_id, rca)
+    except Exception as exc:  # noqa: BLE001
+        log.warning(t.AVISO_STORE_FALHOU.format(id=incident_id, tipo=type(exc).__name__))
+        await _record_failure(
+            store, incident_id, t.ERRO_INVESTIGACAO_FALHOU.format(tipo=type(exc).__name__)
+        )
     if not rca.unknown:
         try:
             await memory.save(incident_id, rca)

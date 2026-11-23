@@ -52,6 +52,9 @@ class Store(Protocol):
 
     async def fail(self, incident_id: int, error: str) -> None: ...
 
+    async def fail_stale(self, older_than_seconds: int, error: str) -> int:
+        """Marca como falhos incidentes `investigating` mais antigos que o limite; devolve quantos."""
+
     async def get(self, incident_id: int) -> Incident | None: ...
 
     async def list(self, limit: int = 100) -> list[Incident]:
@@ -107,6 +110,13 @@ class MemoryStore:
     async def fail(self, incident_id: int, error: str) -> None:
         inc = self._incidents[incident_id]
         inc.status, inc.error = "failed", error
+
+    async def fail_stale(self, older_than_seconds: int, error: str) -> int:
+        cutoff = self._clock() - timedelta(seconds=older_than_seconds)
+        stale = [i for i in self._incidents.values() if i.status == "investigating" and i.created_at < cutoff]
+        for inc in stale:
+            inc.status, inc.error = "failed", error
+        return len(stale)
 
     async def get(self, incident_id: int) -> Incident | None:
         inc = self._incidents.get(incident_id)

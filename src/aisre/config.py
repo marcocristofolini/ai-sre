@@ -21,3 +21,6 @@ class Settings(BaseSettings):
     kubernetes_enabled: bool = False
     dedupe_window_seconds: int = 300
     investigation_timeout_seconds: int = 300
+    max_concurrent_investigations: int = 3
+    max_webhook_body_bytes: int = 1_000_000
+    max_alerts_per_request: int = 100
