@@ -44,10 +44,16 @@ def fit(text: str, limit: int) -> str:
             return escape(raw + "…")
 
 
+CODE_LIMIT = 2900  # cabe no limite de 3000 do bloco junto com as crases
+
+
+def command_is_showable(command: str) -> bool:
+    """O comando só pode ser aprovado se o aprovador o vê por inteiro e sem alterações."""
+    return "`" not in command and len(escape(command)) <= CODE_LIMIT
+
+
 def _code(command: str) -> str:
-    # Sem crases no conteúdo, o texto não consegue fechar o bloco de código.
-    safe = fit(command.replace("`", "ˋ"), 1500)
-    return f"```{safe}```"
+    return f"```{escape(command)}```"
 
 
 def build_message(incident_id: int, rca: RCA) -> dict:
@@ -79,23 +85,27 @@ def build_message(incident_id: int, rca: RCA) -> dict:
     text = "\n".join(line for line in lines if line)
     blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": text[:SECTION_LIMIT]}})
 
-    if not unknown and rca.suggested_command:
-        blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": t.SLACK_COMANDO}})
-        blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": _code(rca.suggested_command)}})
-        blocks.append(
-            {
-                "type": "actions",
-                "elements": [
-                    {
-                        "type": "button",
-                        "action_id": APPROVE_ACTION_ID,
-                        "text": {"type": "plain_text", "text": t.SLACK_BOTAO_APROVAR},
-                        "style": "primary",
-                        "value": str(incident_id),  # só o id: o comando vem do RCA salvo
-                    }
-                ],
-            }
-        )
+    command = rca.suggested_command
+    if not unknown and command:
+        if command_is_showable(command):
+            blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": t.SLACK_COMANDO}})
+            blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": _code(command)}})
+            blocks.append(
+                {
+                    "type": "actions",
+                    "elements": [
+                        {
+                            "type": "button",
+                            "action_id": APPROVE_ACTION_ID,
+                            "text": {"type": "plain_text", "text": t.SLACK_BOTAO_APROVAR},
+                            "style": "primary",
+                            "value": str(incident_id),  # só o id: o comando vem do RCA salvo
+                        }
+                    ],
+                }
+            )
+        else:
+            blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": t.SLACK_COMANDO_NAO_EXIBIVEL}})
     return {"text": title[:MESSAGE_TEXT_LIMIT], "blocks": blocks}
 
 

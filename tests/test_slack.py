@@ -275,7 +275,7 @@ async def test_post_rca_sends_blocks_with_approve_button():
     body = json.loads(req.content)
     assert body["channel"] == "C123"
     text = json.dumps(body, ensure_ascii=False)
-    assert "Aprovar" in text and "OOM no api" in text and "log:a" in text and CMD in text and "0.8" in text or "80" in text
+    assert all(x in text for x in ("Aprovar", "OOM no api", "log:a", "oom killed", CMD, "80%"))
     buttons = [e for b in body["blocks"] if b["type"] == "actions" for e in b["elements"]]
     assert len(buttons) == 1 and buttons[0]["value"] == "7" and buttons[0]["action_id"] == "aisre_approve"
 
@@ -295,7 +295,7 @@ async def test_post_rca_unknown_has_no_button_and_says_dont_know():
 async def test_post_rca_escapes_mrkdwn_injection_and_code_block_breakout():
     sent, tr = _capture()
     evil = "<!channel> <!here> <@U123> <https://evil|click> & ```\n<!everyone>"
-    rca = _rca(cause=evil, suggested_command="ls ``` <!channel> &",
+    rca = _rca(cause=evil, suggested_command="ls <!channel> &",
                evidence=[Evidence(kind="log", ref="<!here>", summary=evil)])
     await post_rca("C123", 7, rca, token=TOKEN, transport=tr)
     body = json.loads(sent[0].content)
@@ -305,14 +305,14 @@ async def test_post_rca_escapes_mrkdwn_injection_and_code_block_breakout():
     assert "&lt;!channel&gt;" in blob and "&amp;" in blob
     # o comando fica num bloco de código que o texto não consegue fechar
     code = [b["text"]["text"] for b in body["blocks"] if b["type"] == "section" and b["text"]["text"].startswith("```")]
-    assert code and code[0].count("```") == 2
+    assert code and code[0].count("```") == 2 and "ls &lt;!channel&gt; &amp;" in code[0]
 
 
 @arun
 async def test_post_rca_truncates_to_slack_limits():
     sent, tr = _capture()
     huge = "&" * 50_000
-    rca = _rca(cause=huge, suggested_command=huge,
+    rca = _rca(cause=huge, suggested_command="ls",
                evidence=[Evidence(kind="log", ref=huge, summary=huge) for _ in range(40)])
     await post_rca("C123", 7, rca, token=TOKEN, transport=tr)
     body = json.loads(sent[0].content)
@@ -419,3 +419,34 @@ def test_migration_0002_packaged_and_applied_after_0001():
 
     names = [n for n, _ in db_postgres.read_migrations()]
     assert names == ["0001_init.sql", "0002_approvals.sql"]
+
+
+def _buttons(body):
+    return [e for b in body["blocks"] if b["type"] == "actions" for e in b["elements"]]
+
+
+@pytest.mark.parametrize("cmd", ["x" * 3000, "&" * 600, "echo `id`", "echo ```; <!channel>"])
+@arun
+async def test_command_not_shown_in_full_and_unaltered_gets_no_button(cmd):
+    sent, tr = _capture()
+    await post_rca("C123", 7, _rca(suggested_command=cmd), token=TOKEN, transport=tr)
+    body = json.loads(sent[0].content)
+    assert _buttons(body) == []
+    assert "Aprovar" not in json.dumps(body, ensure_ascii=False)
+    assert "OOM no api" in json.dumps(body, ensure_ascii=False)
+
+
+def test_displayed_command_equals_recorded_command():
+    import html
+
+    cmd = "kubectl get pods -n prod -o 'jsonpath={.items[*].metadata.name}' && echo <ok>"
+    sent, tr = _capture()
+    rca = _rca(suggested_command=cmd)
+    asyncio.run(post_rca("C123", 7, rca, token=TOKEN, transport=tr))
+    body = json.loads(sent[0].content)
+    assert len(_buttons(body)) == 1
+    code = [b["text"]["text"] for b in body["blocks"] if b["type"] == "section" and b["text"]["text"].startswith("```")][0]
+    assert html.unescape(code[3:-3]) == cmd
+    client, _, inc = _setup(rca=rca)
+    assert _post(client, _form("U1", str(inc.id))).status_code == 200
+    assert client.get(f"/incidents/{inc.id}").json()["approvals"][0]["command"] == cmd
