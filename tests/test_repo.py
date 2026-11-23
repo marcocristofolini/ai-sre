@@ -1,6 +1,7 @@
 """I11: prontidão para código aberto (arquivos de raiz, .gitignore, dependências de teste)."""
 
 import json
+import re
 import tomllib
 from pathlib import Path
 
@@ -41,3 +42,20 @@ def test_gitignore_excludes_env_files():
 def test_dev_extras_include_pyyaml():
     dev = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]["optional-dependencies"]["dev"]
     assert any(d.lower().startswith("pyyaml") for d in dev)
+
+
+def test_ci_workflow_is_least_privilege_and_covers_python_web_helm():
+    import yaml
+
+    text = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    wf = yaml.safe_load(text)
+    assert wf["permissions"] == {"contents": "read"}
+    assert "${{ secrets." not in text and "pull_request_target" not in text
+    assert wf["jobs"]["python"]["strategy"]["matrix"]["python"] == ["3.12", "3.13"]
+    uses = [step["uses"] for job in wf["jobs"].values() for step in job["steps"] if "uses" in step]
+    assert all(re.fullmatch(r"[\w./-]+@v\d+", u) for u in uses), uses  # tag maior, nunca branch
+    assert "azure/setup-helm@v4" in uses
+    assert re.search(r"version: v3\.\d+\.\d+", text) and 'node-version: "22"' in text
+    for needle in ("pytest tests -W error", "npm --prefix web ci", "npm --prefix web test",
+                   "helm lint deploy/helm/aisre", "pytest tests/deploy"):
+        assert needle in text, needle
