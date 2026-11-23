@@ -228,7 +228,7 @@ def test_local_model_is_only_emitted_when_set_and_notes_warn():
 
 def test_extra_env_guard_rejects_managed_and_secret_like_keys():
     cm = (TEMPLATES / "configmap.yaml").read_text(encoding="utf-8")
-    assert re.search(r"has \$k \$managed\s*\}\}\{\{\s*fail", cm)
+    assert re.search(r"has \(upper \$k\) \$managed\s*\}\}\{\{\s*fail", cm), "guard deve normalizar com upper (pydantic-settings e case-insensitive)"
     assert re.search(r'regexMatch "\(\?i\)\(TOKEN\|SECRET\|PASSWORD\|KEY\|HASH\)" \$k\s*\}\}\{\{\s*fail', cm)
     guard = set(re.findall(r'"(AISRE_[A-Z_]+)"', cm))
     set_keys = set(re.findall(r"^\s*(AISRE_[A-Z_]+):", cm, flags=re.M))
@@ -356,7 +356,7 @@ def test_rendered_external_db_skips_statefulset():
 
 @needs_helm
 def test_rendered_extra_env_guard_fails():
-    for bad in ("AISRE_LLM_EXTERNAL_CONSENT", "MY_API_TOKEN"):
+    for bad in ("AISRE_LLM_EXTERNAL_CONSENT", "aisre_llm_external_consent", "Aisre_Database_Url", "MY_API_TOKEN"):
         r = subprocess.run(
             [HELM, "template", "aisre", str(CHART), *MIN_ARGS, "--set-string", f"extraEnv.{bad}=x"],
             capture_output=True, text=True, timeout=60,

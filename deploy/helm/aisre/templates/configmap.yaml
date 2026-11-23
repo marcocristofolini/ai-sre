@@ -29,7 +29,7 @@ data:
   {{- /* extraEnv NÃO pode redefinir chaves gerenciadas pelo chart nem carregar segredos. */ -}}
   {{- $managed := list "AISRE_LLM_PROVIDER" "AISRE_LLM_MODEL" "AISRE_LLM_BASE_URL" "AISRE_LLM_EXTERNAL_CONSENT" "AISRE_LLM_API_KEY" "AISRE_DATABASE_URL" "AISRE_PROMETHEUS_URL" "AISRE_LOKI_URL" "AISRE_SLACK_CHANNEL" "AISRE_SLACK_APPROVERS" "AISRE_SLACK_BOT_TOKEN" "AISRE_SLACK_SIGNING_SECRET" "AISRE_GITHUB_REPO" "AISRE_GITHUB_TOKEN" "AISRE_KUBERNETES_ENABLED" "AISRE_ADMIN_USER" "AISRE_ADMIN_PASSWORD_HASH" "AISRE_SESSION_SECRET" "AISRE_SESSION_COOKIE_SECURE" "AISRE_SESSION_TTL_SECONDS" "AISRE_PREDICT_WORKLOADS" "AISRE_WEB_DIST_DIR" }}
   {{- range $k, $v := .Values.extraEnv }}
-  {{- if has $k $managed }}{{ fail (printf "extraEnv.%s é gerenciada por valores dedicados do chart; use-os" $k) }}{{ end }}
+  {{- if has (upper $k) $managed }}{{ fail (printf "extraEnv.%s é gerenciada por valores dedicados do chart; use-os" $k) }}{{ end }}
   {{- if regexMatch "(?i)(TOKEN|SECRET|PASSWORD|KEY|HASH)" $k }}{{ fail (printf "extraEnv.%s parece segredo; segredos só via Secret existente (secrets.existingSecret)" $k) }}{{ end }}
   {{ $k }}: {{ $v | quote }}
   {{- end }}
