@@ -1,0 +1,147 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "aisre.fullname" . }}
+  labels:
+    {{- include "aisre.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "aisre.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- /* Cobre o conteúdo dos Secrets criados pelo chart (secrets.create / postgres.external.url): trocar
+               um valor reinicia o pod. Secrets existentes (existingSecret) NÃO entram: veja o README. */}}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "aisre.selectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "aisre.serviceAccountName" . }}
+      automountServiceAccountToken: {{ .Values.kubernetes.enabled }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: aisre
+          image: {{ include "aisre.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: {{ include "aisre.fullname" . }}
+          env:
+            {{- if .Values.postgres.enabled }}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "aisre.postgres.secretName" . }}
+                  key: {{ .Values.postgres.auth.passwordKey }}
+            - name: AISRE_DATABASE_URL
+              value: "postgresql://{{ .Values.postgres.auth.username }}:$(POSTGRES_PASSWORD)@{{ include "aisre.fullname" . }}-postgres:5432/{{ .Values.postgres.auth.database }}"
+            {{- else }}
+            - name: AISRE_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "aisre.dbUrl.secretName" . }}
+                  key: {{ .Values.postgres.external.urlKey }}
+            {{- end }}
+            - name: AISRE_ADMIN_PASSWORD_HASH
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "aisre.secretName" . }}
+                  key: admin-password-hash
+            - name: AISRE_SESSION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "aisre.secretName" . }}
+                  key: session-secret
+            - name: AISRE_LLM_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "aisre.secretName" . }}
+                  key: llm-api-key
+                  optional: true
+            - name: AISRE_SLACK_BOT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "aisre.secretName" . }}
+                  key: slack-bot-token
+                  optional: true
+            - name: AISRE_SLACK_SIGNING_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "aisre.secretName" . }}
+                  key: slack-signing-secret
+                  optional: true
+            - name: AISRE_GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "aisre.secretName" . }}
+                  key: github-token
+                  optional: true
+            - name: AISRE_WEBHOOK_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "aisre.secretName" . }}
+                  key: webhook-token
+                  optional: true  # ausente => o app recusa o webhook com 503 (falha fechado)
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            {{- with .Values.scoreboard.configMap }}
+            - name: scoreboard
+              mountPath: /app/eval
+              readOnly: true
+            {{- end }}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        {{- with .Values.scoreboard.configMap }}
+        - name: scoreboard
+          configMap:
+            name: {{ . }}
+            items:
+              - key: scoreboard.json
+                path: scoreboard.json
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

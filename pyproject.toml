@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=77"]  # >=77: license SPDX (PEP 639)
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aisre"
+version = "0.1.0"
+description = "AI SRE: análise de causa raiz de incidentes com evidências"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+authors = [{ name = "Marco Fabricio Cristofolini" }]
+requires-python = ">=3.12"
+dependencies = [
+    "pydantic>=2.6",
+    "pydantic-settings>=2.2",
+    "httpx>=0.27",
+    "kubernetes>=29",
+    "anthropic>=0.40",
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+    "psycopg[binary]>=3.1",
+    "psycopg-pool>=3.2",
+    "numpy>=1.26",
+    "scikit-learn>=1.4",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pyyaml>=6"]  # PyYAML: testes estáticos do chart e do harness
+
+[tool.setuptools.package-data]
+aisre = ["migrations/*.sql"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+markers = [
+    "e2e: exige cluster kind real (defina AISRE_E2E=1)",
+    "integration: exige Postgres com pgvector (defina AISRE_TEST_DATABASE_URL)",
+]

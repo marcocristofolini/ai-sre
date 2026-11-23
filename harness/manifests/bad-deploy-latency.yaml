@@ -1,0 +1,36 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: eval-3
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: eval-3
+  annotations:
+    kubernetes.io/change-cause: "deploy recente: adiciona sleep de 2s em cada requisicao"
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: api}
+  template:
+    metadata:
+      labels: {app: api}
+    spec:
+      containers:
+        - name: api
+          image: python:3.12-alpine
+          command:
+            - python
+            - -c
+            - |
+              import time
+              from http.server import BaseHTTPRequestHandler, HTTPServer
+              class H(BaseHTTPRequestHandler):
+                  def do_GET(self):
+                      time.sleep(2)  # regressao introduzida pelo deploy
+                      self.send_response(200); self.end_headers(); self.wfile.write(b"ok")
+              HTTPServer(("", 8080), H).serve_forever()
+          ports:
+            - containerPort: 8080

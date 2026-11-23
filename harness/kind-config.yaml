@@ -1,0 +1,17 @@
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: aisre-eval
+nodes:
+  - role: control-plane
+    # evictionHard explícito (sinais não listados viram 0). nodefs.available começa no padrão do kubelet
+    # e é trocado por harness/set-disk-threshold.sh (chamado pelo `make eval`) por um limiar ABSOLUTO
+    # logo abaixo do espaço livre medido no nó: o cenário node-disk-pressure só precisa de um
+    # enchimento pequeno e fixo, sem levar o disco do host a ~95%.
+    kubeadmConfigPatches:
+      - |
+        kind: KubeletConfiguration
+        evictionHard:
+          memory.available: "100Mi"
+          nodefs.available: "10%"
+          nodefs.inodesFree: "5%"
+          imagefs.available: "15%"

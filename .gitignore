@@ -2,3 +2,10 @@
 __pycache__/
 .venv/
 node_modules/
+*.egg-info/
+eval/
+web/node_modules/
+web/dist/
+.env
+.env.*
+docs/superpowers/

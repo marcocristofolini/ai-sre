@@ -1,0 +1,21 @@
+# Valores mínimos do kube-prometheus-stack para `make eval-full` (cluster kind descartável).
+# NÃO verificado: nenhum helm/kind/Docker disponível onde isto foi escrito.
+fullnameOverride: kps          # o Service do Prometheus fica kps-prometheus
+grafana:
+  enabled: false
+alertmanager:
+  enabled: false
+# kind não expõe esses componentes do plano de controle para raspagem.
+kubeEtcd: {enabled: false}
+kubeScheduler: {enabled: false}
+kubeControllerManager: {enabled: false}
+kubeProxy: {enabled: false}
+prometheus:
+  prometheusSpec:
+    retention: 6h
+    scrapeInterval: 15s
+    # Raspa também ServiceMonitors/PodMonitors fora do chart.
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    resources:
+      requests: {cpu: 100m, memory: 400Mi}

@@ -1,0 +1,197 @@
+# Valores padrão do chart aisre. NENHUM segredo tem valor padrão: use Secrets existentes (veja README).
+
+image:
+  repository: aisre
+  tag: ""            # vazio = appVersion do Chart. Nunca use "latest".
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+
+replicaCount: 1      # v1: 1 réplica (limitador de login e preditivo vivem em memória)
+
+# Segredos da aplicação. Chaves esperadas no Secret (todas opcionais, exceto as duas primeiras):
+#   admin-password-hash  hash scrypt da senha do admin   (python -m aisre.auth hash)
+#   session-secret       segredo da sessão               (python -m aisre.auth secret)
+#   llm-api-key          chave do provedor LLM (anthropic; opcional para local)
+#   slack-bot-token      token do bot do Slack
+#   slack-signing-secret segredo de assinatura do Slack
+#   github-token         token somente leitura do GitHub
+#   webhook-token        token Bearer exigido em /alerts/webhook (sem ele o webhook responde 503)
+secrets:
+  existingSecret: ""   # nome de um Secret já existente no namespace (recomendado)
+  create: false        # true = o chart cria o Secret, SOMENTE com os valores abaixo que você informar
+  values:              # nunca versione valores reais; prefira --set-file/--set na linha de comando
+    adminPasswordHash: ""
+    sessionSecret: ""
+    llmApiKey: ""
+    slackBotToken: ""
+    slackSigningSecret: ""
+    githubToken: ""
+    webhookToken: ""
+
+llm:
+  provider: local          # anthropic | local
+  # Consentimento para enviar dados a um LLM EXTERNO. Falso: com provider=anthropic (ou um
+  # endpoint local fora do cluster) as investigações são recusadas, nada sai do cluster.
+  externalConsent: false
+  anthropic:
+    model: claude-sonnet-5-5
+  local:
+    url: ""                # endpoint compatível com OpenAI, ex.: http://ollama.llm.svc:11434 (o app acrescenta /v1/chat/completions)
+    model: ""              # obrigatório na prática com provider=local (vazio: AISRE_LLM_MODEL não é emitido)
+
+slack:
+  enabled: false           # true = o Ingress publica /slack/actions (o Slack precisa alcançá-lo por URL pública)
+  channel: ""
+  approvers: []            # IDs de usuário do Slack autorizados a aprovar (ex.: ["U012ABC"])
+
+prometheus:
+  url: ""
+loki:
+  url: ""
+github:
+  repo: ""                 # owner/repo; o token vem do Secret (github-token)
+
+webhook:
+  # O token vem do Secret (chave webhook-token). Sem token o webhook falha fechado (503).
+  # true SÓ em desenvolvimento: aceita alertas sem autenticação quando não há token.
+  allowUnauthenticated: false
+
+kubernetes:
+  enabled: true            # liga a ferramenta kubernetes e o RBAC somente leitura
+
+memory:
+  topK: 3                  # incidentes anteriores semelhantes dados ao agente como contexto não confiável; 0 desativa
+
+auth:
+  adminUser: admin
+  cookieSecure: true       # false só em testes via port-forward (http)
+  sessionTtlSeconds: 28800
+
+predict:
+  # Lista de {name: "namespace/workload", query: "PromQL que devolve UMA série"}. Vazio = preditivo desligado.
+  workloads: []
+
+# Placar de precisão (`make eval`) mostrado em /scoreboard. Vazio = "Sem medição ainda".
+# Nome de um ConfigMap com a chave scoreboard.json, montado em /app/eval (somente leitura).
+scoreboard:
+  configMap: ""
+
+# Variáveis adicionais NÃO secretas, ex.: {AISRE_DEDUPE_WINDOW_SECONDS: "600"}. O chart FALHA se a chave
+# for uma variável gerenciada pelos valores dedicados (ex.: AISRE_LLM_EXTERNAL_CONSENT) ou parecer segredo
+# (TOKEN, SECRET, PASSWORD, KEY, HASH). Segredos só via Secret existente.
+extraEnv: {}
+
+# IPs/CIDRs de proxies confiáveis (ex.: pods do controlador de Ingress) cujo X-Forwarded-For o uvicorn
+# aceita como IP do cliente (limite de login por IP). Padrão restritivo: só localhost. "*" confia em todos
+# (NUNCA use se o serviço for alcançável sem passar pelo proxy).
+proxy:
+  forwardedAllowIps: "127.0.0.1"
+
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: aisre.example.com
+  tls: []
+  # O Ingress NÃO expõe /alerts/webhook por padrão. Regras de Ingress não conseguem "subtrair" um caminho
+  # de "/", então só os caminhos que o dashboard realmente usa são publicados: "/" EXATO (index.html) e os
+  # prefixos abaixo (rotas da API em src/aisre/api e os assets do build em web/dist/assets). Se o dashboard
+  # ganhar uma rota nova, ela NÃO fica pública até entrar aqui. Rotas por hash (#/incidentes) não chegam ao servidor.
+  publicPrefixes:
+    - /auth
+    - /incidents
+    - /risk
+    - /scoreboard
+    - /integrations
+    - /healthz
+    - /assets
+  # /slack/actions (Interactivity do Slack) só é publicado com slack.enabled=true (veja `slack:` acima).
+  webhook:
+    # true publica /alerts/webhook (exige token Bearer, mas fica alcançável pela internet: abre superficie
+    # de abuso de custo de LLM). Prefira que o Alertmanager use o Service interno.
+    enabled: false
+
+serviceAccount:
+  create: true
+  name: ""
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  fsGroup: 10001
+  seccompProfile:
+    type: RuntimeDefault
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  capabilities:
+    drop: ["ALL"]
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: "1"
+    memory: 1Gi
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+# Anotações extras do pod. Rotação de segredos: com secrets.create=true o chart já reinicia o pod quando o
+# conteúdo muda (checksum/secret). Com secrets.existingSecret o chart NÃO vê o conteúdo: depois de rotacionar,
+# rode `kubectl rollout restart deploy/<release>-aisre` ou mude uma anotação aqui, ex.:
+#   --set-string podAnnotations.secret-rotated-at=2026-11-23
+podAnnotations: {}
+
+# NetworkPolicy opcional. Com enabled=true: o app só aceita entrada dos peers em ingressFrom
+# (lista vazia = nenhuma entrada) e o Postgres só aceita o app. Egress não é restrito.
+networkPolicy:
+  enabled: false
+  ingressFrom: []          # peers do NetworkPolicy, ex.: [{namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: monitoring}}}]
+
+postgres:
+  enabled: true            # false = usa banco externo (external.*)
+  image:
+    repository: pgvector/pgvector
+    tag: 0.8.0-pg17
+    pullPolicy: IfNotPresent
+  auth:
+    username: aisre
+    database: aisre
+    existingSecret: ""     # Secret com a senha do usuário (use senha só com [A-Za-z0-9_-])
+    passwordKey: postgres-password
+  persistence:
+    size: 10Gi
+    storageClass: ""
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 999
+    runAsGroup: 999
+    fsGroup: 999
+    seccompProfile:
+      type: RuntimeDefault
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: false   # a imagem oficial grava em /var/run/postgresql e /tmp (emptyDirs montados)
+    runAsNonRoot: true
+    capabilities:
+      drop: ["ALL"]
+  external:
+    existingSecret: ""     # Secret com a URL completa do banco
+    urlKey: database-url
+    url: ""                # alternativa: o chart guarda a URL num Secret próprio (contém credenciais!)

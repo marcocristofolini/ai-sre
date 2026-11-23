@@ -1,0 +1,60 @@
+AI SRE instalado: {{ include "aisre.fullname" . }} (namespace {{ .Release.Namespace }}).
+
+Acesso ao dashboard (sem Ingress):
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "aisre.fullname" . }} 8080:{{ .Values.service.port }}
+  Abra http://localhost:8080 e entre com o usuário "{{ .Values.auth.adminUser }}".
+{{- if .Values.auth.cookieSecure }}
+  AVISO: auth.cookieSecure=true; via http (port-forward) o navegador não guarda o cookie de sessão.
+  Para um teste local use --set auth.cookieSecure=false (nunca em produção).
+{{- end }}
+
+Alerta de teste (Alertmanager/webhook; o token é a chave webhook-token do Secret):
+  curl -X POST http://localhost:8080/alerts/webhook -H 'Content-Type: application/json' \
+    -H "Authorization: Bearer $AISRE_WEBHOOK_TOKEN" \
+    -d '{"alerts":[{"status":"firing","labels":{"alertname":"TesteAlerta","namespace":"default"},"startsAt":"2026-01-01T00:00:00Z"}]}'
+
+{{- if and (eq .Values.llm.provider "anthropic") (not .Values.llm.externalConsent) }}
+
+AVISO: llm.provider=anthropic com llm.externalConsent=false.
+  O provedor Anthropic é externo: sem consentimento, NENHUM dado sai do cluster e as
+  investigações serão recusadas (o incidente fica com erro de consentimento).
+  Para autorizar o envio de dados ao LLM externo, defina explicitamente --set llm.externalConsent=true.
+  Para manter tudo dentro do cluster, use llm.provider=local com llm.local.url.
+{{- end }}
+{{- if and (eq .Values.llm.provider "local") (not .Values.llm.local.url) }}
+
+AVISO: llm.provider=local sem llm.local.url: as investigações vão falhar até você informar o endpoint.
+{{- end }}
+{{- if and (eq .Values.llm.provider "local") (not .Values.llm.local.model) }}
+
+AVISO: llm.provider=local sem llm.local.model: nenhum modelo é definido (AISRE_LLM_MODEL não é emitido) e o
+endpoint local receberia o modelo padrão do app, que não existe nele. Informe llm.local.model.
+{{- end }}
+{{- if and (eq .Values.llm.provider "local") .Values.llm.local.url (not .Values.llm.externalConsent) }}
+
+Observação: se llm.local.url apontar para fora do cluster/rede privada, o app o trata como externo
+e também exige llm.externalConsent=true.
+{{- end }}
+
+SEGURANÇA: /alerts/webhook exige "Authorization: Bearer <token>" (chave webhook-token do Secret).
+Sem a chave, o webhook responde 503 (falha fechado). No Alertmanager use http_config.authorization (veja o README).
+{{- if .Values.webhook.allowUnauthenticated }}
+  AVISO: webhook.allowUnauthenticated=true: sem webhook-token, QUALQUER cliente abre incidentes (e gasta LLM).
+  Use só em desenvolvimento.
+{{- end }}
+{{- if .Values.ingress.enabled }}
+  Ingress: publica só "/" (exato) e {{ join ", " .Values.ingress.publicPrefixes }}{{ if .Values.slack.enabled }}, /slack/actions{{ end }}.
+{{- if .Values.ingress.webhook.enabled }}
+  AVISO: ingress.webhook.enabled=true: /alerts/webhook está alcançável por fora (com token). Prefira o Service interno.
+{{- else }}
+  /alerts/webhook NÃO é exposto pelo Ingress: o Alertmanager deve usar o Service interno.
+{{- end }}
+{{- if not .Values.slack.enabled }}
+  /slack/actions NÃO é exposto (slack.enabled=false): os botões do Slack não funcionarão por fora do cluster.
+{{- end }}
+{{- end }}
+{{- if not .Values.networkPolicy.enabled }}
+  (networkPolicy.enabled=false: qualquer pod do cluster alcança o serviço.)
+{{- end }}
+O produto só sugere comandos e registra aprovações; nada é executado. O RBAC é somente leitura (get/list/watch
+em pods, nodes e events).

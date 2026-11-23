@@ -1,0 +1,13 @@
+.git
+.venv
+.superpowers
+eval
+**/node_modules
+web/dist
+**/__pycache__
+**/*.egg-info
+.env
+.env.*
+tests
+docs
+deploy
