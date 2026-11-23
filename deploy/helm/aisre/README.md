@@ -131,6 +131,14 @@ kubectl -n aisre port-forward svc/aisre 8080:80
 O cookie de sessão é `Secure` por padrão (`auth.cookieSecure=true`), então via `http://localhost` o login não persiste.
 Para teste local use `--set auth.cookieSecure=false` (nunca em produção). Em produção, habilite `ingress.*` com TLS.
 
+Atrás de um Ingress, o limite de login por IP precisa do IP real do cliente: a imagem roda o uvicorn com
+`--proxy-headers`, e `proxy.forwardedAllowIps` (variável `FORWARDED_ALLOW_IPS`) diz de quais proxies o
+`X-Forwarded-For` é aceito. Padrão `127.0.0.1` (restritivo: atrás do Ingress todos parecem vir do mesmo IP, e
+5 falhas de qualquer um bloqueiam o login por IP para todos). Informe o(s) IP/CIDR dos pods do seu controlador
+de Ingress, ex.: `--set proxy.forwardedAllowIps=10.42.0.0/16`. Não use `*` se o Service for alcançável sem
+passar pelo proxy. Por usuário não há bloqueio rígido: após 5 falhas, cada tentativa espera um atraso
+progressivo (1s, 2s, 4s… até 30s).
+
 ## Enviando um alerta de teste
 
 Formato do Alertmanager (campos aceitos: `alerts[].status`, `alerts[].labels` com `alertname`, `alerts[].startsAt`;

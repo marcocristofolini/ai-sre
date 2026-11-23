@@ -13,6 +13,7 @@ import getpass
 import hashlib
 import hmac
 import json
+import math
 import secrets
 import sys
 import time
@@ -98,23 +99,31 @@ def read_session(secret: str, token: str | None, now: float) -> str | None:
 
 
 class LoginThrottle:
-    """Contador de falhas por IP e por usuário; excedido o limite, bloqueia por `lockout_seconds`.
+    """Limita tentativas de login. Em memória (por processo) e com relógio injetável.
 
-    Em memória (por processo) e com relógio injetável."""
+    - Por IP: `max_per_ip` falhas na janela => bloqueio de `lockout_seconds` (o IP real vem do
+      uvicorn com --proxy-headers e FORWARDED_ALLOW_IPS restrito ao proxy confiável).
+    - Por usuário: SEM bloqueio rígido (senão qualquer um, de qualquer IP, trancaria o "admin").
+      Depois de `user_free_failures` falhas na janela, cada nova tentativa daquele usuário espera
+      um atraso progressivo (`user_base_delay * 2**k`, no máximo `user_max_delay`) desde a última falha.
+    """
 
     def __init__(
         self,
         max_per_ip: int = 5,
-        max_per_user: int = 20,
+        user_free_failures: int = 5,
         window_seconds: float = 900.0,
         lockout_seconds: float = 900.0,
         clock: Callable[[], float] = time.time,
         max_entries: int = 10_000,
+        user_base_delay: float = 1.0,
+        user_max_delay: float = 30.0,
     ) -> None:
-        self._limits = {"ip": max_per_ip, "user": max_per_user}
+        self._max_ip, self._free = max_per_ip, user_free_failures
+        self._base, self._max_delay = user_base_delay, user_max_delay
         self._window, self._lockout, self._clock, self._max = window_seconds, lockout_seconds, clock, max_entries
         self._state: dict[tuple[str, str], list[float]] = defaultdict(lambda: [0, 0.0, 0.0])
-        # valor: [falhas, início da janela, bloqueado até]
+        # valor: [falhas, início da janela, bloqueado/atrasado até]
 
     def _keys(self, ip: str, user: str) -> list[tuple[str, str]]:
         return [("ip", ip), ("user", user.casefold()[:128])]
@@ -126,7 +135,7 @@ class LoginThrottle:
             st = self._state.get(key)
             if st and st[2] > now:
                 wait = max(wait, st[2] - now)
-        return int(wait) + 1 if wait > 0 else 0
+        return math.ceil(wait) if wait > 0 else 0
 
     def failure(self, ip: str, user: str) -> None:
         now = self._clock()
@@ -135,10 +144,14 @@ class LoginThrottle:
         for key in self._keys(ip, user):
             st = self._state[key]
             if now - st[1] > self._window:
-                st[0], st[1] = 0, now
+                st[0], st[1], st[2] = 0, now, 0.0
             st[0] += 1
-            if st[0] >= self._limits[key[0]]:
-                st[2] = now + self._lockout
+            if key[0] == "ip":
+                if st[0] >= self._max_ip:
+                    st[2] = now + self._lockout
+            elif st[0] >= self._free:
+                delay = min(self._base * 2 ** (st[0] - self._free), self._max_delay)
+                st[2] = now + delay
 
     def success(self, ip: str, user: str) -> None:
         for key in self._keys(ip, user):

@@ -291,7 +291,9 @@ def test_dockerfile_and_dockerignore():
         assert ":" in line and not line.endswith(":latest"), line
     users = re.findall(r"^USER\s+(\S+)", df, flags=re.M)
     assert users and users[-1] not in {"root", "0"}
-    assert re.search(r'CMD \["uvicorn", "aisre\.api\.main:create_app", "--factory", "--host", "0\.0\.0\.0", "--port", "8000"\]', df)
+    assert re.search(r'CMD \["uvicorn", "aisre\.api\.main:create_app", "--factory", "--host", "0\.0\.0\.0", "--port", "8000", "--proxy-headers"\]', df)
+    # I6: padrão restritivo de proxies confiáveis embutido na imagem.
+    assert re.search(r"^ENV FORWARDED_ALLOW_IPS=127\.0\.0\.1$", df, flags=re.M)
     assert not re.search(r"^\s*(ENV|ARG)\s+\S*(PASSWORD|TOKEN|SECRET|API_KEY)\S*\s*=?\s*\S+", df, flags=re.M | re.I)
     ignore = (ROOT / ".dockerignore").read_text(encoding="utf-8").split()
     for must in (".venv", "node_modules", ".superpowers", "eval", ".git"):
@@ -308,6 +310,16 @@ def test_readme_documents_required_topics():
     ):
         assert needle in readme, needle
     assert "está sem autenticação" not in readme  # afirmação antiga, não vale mais
+
+
+def test_forwarded_allow_ips_value_is_restrictive_and_wired():
+    v = _values()
+    assert v["proxy"]["forwardedAllowIps"] == "127.0.0.1"
+    cm = (TEMPLATES / "configmap.yaml").read_text(encoding="utf-8")
+    assert re.search(r"^\s*FORWARDED_ALLOW_IPS:\s*\{\{\s*\.Values\.proxy\.forwardedAllowIps\s*\|\s*quote\s*\}\}", cm, flags=re.M)
+    assert '"FORWARDED_ALLOW_IPS"' in cm  # extraEnv não pode redefinir
+    readme = (CHART / "README.md").read_text(encoding="utf-8")
+    assert "proxy.forwardedAllowIps" in readme and "--proxy-headers" in readme
 
 
 def test_webhook_token_secret_key_is_wired_without_default():
@@ -381,7 +393,8 @@ def test_rendered_external_db_skips_statefulset():
 
 @needs_helm
 def test_rendered_extra_env_guard_fails():
-    for bad in ("AISRE_LLM_EXTERNAL_CONSENT", "aisre_llm_external_consent", "Aisre_Database_Url", "MY_API_TOKEN"):
+    for bad in ("AISRE_LLM_EXTERNAL_CONSENT", "aisre_llm_external_consent", "Aisre_Database_Url", "MY_API_TOKEN",
+                "FORWARDED_ALLOW_IPS"):
         r = subprocess.run(
             [HELM, "template", "aisre", str(CHART), *MIN_ARGS, "--set-string", f"extraEnv.{bad}=x"],
             capture_output=True, text=True, timeout=60,

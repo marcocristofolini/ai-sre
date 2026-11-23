@@ -72,6 +72,12 @@ predict:
 # (TOKEN, SECRET, PASSWORD, KEY, HASH). Segredos só via Secret existente.
 extraEnv: {}
 
+# IPs/CIDRs de proxies confiáveis (ex.: pods do controlador de Ingress) cujo X-Forwarded-For o uvicorn
+# aceita como IP do cliente (limite de login por IP). Padrão restritivo: só localhost. "*" confia em todos
+# (NUNCA use se o serviço for alcançável sem passar pelo proxy).
+proxy:
+  forwardedAllowIps: "127.0.0.1"
+
 service:
   type: ClusterIP
   port: 80

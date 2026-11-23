@@ -24,4 +24,7 @@ RUN groupadd --system --gid 10001 aisre \
  && useradd --system --uid 10001 --gid aisre --no-create-home --shell /usr/sbin/nologin aisre
 USER 10001:10001
 EXPOSE 8000
-CMD ["uvicorn", "aisre.api.main:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]
+# --proxy-headers: o IP do cliente vem de X-Forwarded-For SOMENTE quando a conexão chega de um IP em
+# FORWARDED_ALLOW_IPS (lido pelo uvicorn do ambiente; padrão restritivo abaixo, o chart o define).
+ENV FORWARDED_ALLOW_IPS=127.0.0.1
+CMD ["uvicorn", "aisre.api.main:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]

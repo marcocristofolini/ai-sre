@@ -199,17 +199,66 @@ def test_session_token_roundtrip_and_limits():
 
 def test_throttle_unit():
     clock = Clock()
-    th = LoginThrottle(max_per_ip=2, max_per_user=3, window_seconds=60, lockout_seconds=120, clock=clock)
+    th = LoginThrottle(max_per_ip=2, user_free_failures=3, window_seconds=60, lockout_seconds=120,
+                       user_base_delay=1, user_max_delay=8, clock=clock)
     assert th.retry_after("1.1.1.1", "a") == 0
     th.failure("1.1.1.1", "a")
     th.failure("1.1.1.1", "a")
-    assert th.retry_after("1.1.1.1", "b") > 0  # por IP
+    assert th.retry_after("1.1.1.1", "b") > 0  # por IP: bloqueio
     assert th.retry_after("2.2.2.2", "b") == 0
-    th.failure("2.2.2.2", "a")
-    th.failure("3.3.3.3", "a")
-    assert th.retry_after("4.4.4.4", "a") > 0  # por usuário
+    th.failure("2.2.2.2", "a")  # 3a falha do usuário: começa o atraso progressivo
+    assert th.retry_after("4.4.4.4", "a") == 1  # por usuário: atraso, não bloqueio
+    clock.t += 1
+    assert th.retry_after("4.4.4.4", "a") == 0
     clock.t += 121
     assert th.retry_after("1.1.1.1", "a") == 0
+
+
+def test_throttle_per_user_delay_grows_but_is_capped():
+    # I6: falhas distribuídas por muitos IPs não trancam o usuário por 15 min; só atrasam (teto).
+    clock = Clock()
+    th = LoginThrottle(clock=clock)  # padrões: 5 falhas livres, atraso de 1s dobrando até 30s
+    waits = []
+    for i in range(30):
+        th.failure(f"10.0.0.{i}", "admin")
+        waits.append(th.retry_after("192.168.1.1", "admin"))
+    assert waits[:4] == [0, 0, 0, 0] and waits[4] == 1 and waits[5] == 2 and waits[6] == 4
+    assert max(waits) == 30 and waits[-1] == 30
+    clock.t += 30
+    assert th.retry_after("192.168.1.1", "admin") == 0  # o admin legítimo entra após no máximo 30s
+
+
+def test_distributed_failures_do_not_lock_admin_out_via_api():
+    clock = Clock()
+    client, _, _ = _app(clock=clock)
+    throttle = client.app.state.login_throttle
+    for i in range(50):  # atacante de 50 IPs diferentes (1 falha cada)
+        throttle.failure(f"10.1.0.{i}", USER)
+    r = login(client)
+    assert r.status_code == 429 and int(r.headers["retry-after"]) <= 30
+    clock.t += 31
+    assert login(client).status_code == 200
+
+
+def test_login_throttle_is_per_real_client_ip_behind_trusted_proxy():
+    """Com o uvicorn (--proxy-headers, FORWARDED_ALLOW_IPS = proxy), o IP do cliente vem do
+    X-Forwarded-For: falhas de um cliente não bloqueiam outro atrás do mesmo Ingress."""
+    from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
+
+    clock = Clock()
+    _, store, _ = _app(clock=clock)
+    settings = Settings(_env_file=None, **auth_kwargs())
+    app = create_app(settings, store, clock=clock)
+    proxied = TestClient(ProxyHeadersMiddleware(app, trusted_hosts="testclient"))
+    attacker = {"X-Forwarded-For": "203.0.113.9"}
+    for _ in range(5):
+        r = proxied.post("/auth/login", json={"username": USER, "password": "errada"}, headers=attacker)
+        assert r.status_code == 401
+    assert proxied.post("/auth/login", json={"username": USER, "password": PASSWORD}, headers=attacker).status_code == 429
+    other = {"X-Forwarded-For": "198.51.100.7"}
+    clock.t += 1  # só o atraso por usuário (1s após 5 falhas); o IP do atacante segue bloqueado
+    assert proxied.post("/auth/login", json={"username": USER, "password": PASSWORD}, headers=attacker).status_code == 429
+    assert proxied.post("/auth/login", json={"username": USER, "password": PASSWORD}, headers=other).status_code == 200
 
 
 # --- aprovação pelo dashboard ---
