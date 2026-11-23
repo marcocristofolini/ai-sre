@@ -80,10 +80,26 @@ def test_oversized_body_is_rejected():
     assert r.status_code == 413
 
 
-def test_too_many_alerts_returns_422():
-    client, _ = _client(max_alerts_per_request=2)
-    r = client.post("/alerts/webhook", json={"alerts": [_alert(i=str(i)) for i in range(3)]})
-    assert r.status_code == 422
+def test_too_many_firing_alerts_are_truncated_with_202(caplog):
+    # I4: o Alertmanager não reenvia 4xx; investiga os N primeiros e informa o truncamento.
+    fake = Fake()
+    client, _ = _client(investigator=fake, max_alerts_per_request=2)
+    with caplog.at_level("WARNING"):
+        r = client.post("/alerts/webhook", json={"alerts": [_alert(i=str(i)) for i in range(3)]})
+    assert r.status_code == 202
+    assert r.json()["truncated"] == {"firing": 3, "investigated": 2}
+    assert len(r.json()["incidents"]) == 2 and len(fake.calls) == 2
+    assert [a.labels["i"] for a in fake.calls] == ["0", "1"]
+    assert "só os 2 primeiros" in caplog.text
+
+
+def test_resolved_alerts_do_not_count_against_the_limit():
+    fake = Fake()
+    client, _ = _client(investigator=fake, max_alerts_per_request=2)
+    resolved = [{**_alert(r=str(i)), "status": "resolved"} for i in range(5)]
+    r = client.post("/alerts/webhook", json={"alerts": [*resolved, _alert(i="a"), _alert(i="b")]})
+    assert r.status_code == 202 and "truncated" not in r.json()
+    assert len(fake.calls) == 2
 
 
 # --- Finding 2 ---

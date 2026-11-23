@@ -23,7 +23,7 @@ from aisre.api import (
     routes_scoreboard,
     routes_slack,
 )
-from aisre.api.ingest import Investigator, default_investigator, run_investigation
+from aisre.api.ingest import Investigator, default_investigator, investigation_queue_full, spawn_investigation
 from aisre.auth import LoginThrottle
 from aisre.config import Settings
 from aisre.db import MemoryStore, Store
@@ -53,8 +53,6 @@ def create_app(
             log.warning(t.AVISO_STORE_EM_MEMORIA)
             store = MemoryStore()
 
-    background: set[asyncio.Task] = set()
-
     async def open_predictive_investigation(workload: str, score: float) -> None:
         """Cria o incidente e enfileira a investigação em tarefa de fundo (não bloqueia o agendador)."""
         alert = Alert(
@@ -62,23 +60,13 @@ def create_app(
             labels={"workload": workload, "origem": "preditivo"},
             fired_at=datetime.now(UTC),
         )
+        if investigation_queue_full(app.state):
+            log.warning(t.AVISO_FILA_INVESTIGACOES_CHEIA.format(limite=settings.max_pending_investigations))
+            return
         incident, created = await store.create_if_new(alert, settings.dedupe_window_seconds)
         if not created:
             return
-        task = asyncio.create_task(
-            run_investigation(
-                incident.id,
-                alert,
-                store,
-                app.state.investigator,
-                app.state.memory,
-                settings.investigation_timeout_seconds,
-                app.state.investigation_semaphore,
-                app.state.rca_hooks,
-            )
-        )
-        background.add(task)
-        task.add_done_callback(background.discard)
+        spawn_investigation(app.state, incident.id, alert)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -100,11 +88,13 @@ def create_app(
             if predictive is not None:
                 predictive_task = asyncio.create_task(predictive.run())
                 predictive_task.add_done_callback(_log_predictive_end)
+            app.state.lifespan_active = True
             try:
                 yield
             finally:
+                app.state.lifespan_active = False
                 # Encerra o preditivo e as investigações pendentes antes de fechar o armazenamento.
-                pending = [*([predictive_task] if predictive_task else []), *background]
+                pending = [*([predictive_task] if predictive_task else []), *app.state.investigation_tasks]
                 for task in pending:
                     task.cancel()
                 await asyncio.gather(*pending, return_exceptions=True)
@@ -121,6 +111,10 @@ def create_app(
     app.state.clock = clock or time.time
     app.state.login_throttle = LoginThrottle(clock=app.state.clock)
     app.state.investigation_semaphore = asyncio.Semaphore(max(1, settings.max_concurrent_investigations))
+    app.state.investigation_tasks = set()
+    app.state.lifespan_active = False
+    if settings.webhook_allow_unauthenticated and not settings.webhook_token.get_secret_value():
+        log.warning(t.AVISO_WEBHOOK_SEM_AUTENTICACAO)
     app.state.settings = settings
     app.state.store = store
     app.state.memory = Memory(store)

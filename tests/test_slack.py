@@ -393,8 +393,8 @@ def _const(rca):
 
 def test_end_to_end_webhook_posts_to_slack():
     sent, tr = _capture()
-    app = create_app(_settings(), MemoryStore(), _const(_rca()), slack_transport=tr)
-    client = TestClient(app)
+    app = create_app(_settings(webhook_token="tok"), MemoryStore(), _const(_rca()), slack_transport=tr)
+    client = TestClient(app, headers={"Authorization": "Bearer tok"})
     r = client.post("/alerts/webhook", json={"alerts": [{
         "status": "firing", "labels": {"alertname": "X"}, "annotations": {},
         "startsAt": "2026-11-23T10:00:00Z"}]})

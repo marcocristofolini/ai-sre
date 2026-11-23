@@ -35,7 +35,12 @@ class Settings(BaseSettings):
     investigation_timeout_seconds: int = 300
     max_concurrent_investigations: int = 3
     max_webhook_body_bytes: int = 1_000_000
-    max_alerts_per_request: int = 100
+    max_alerts_per_request: int = 100  # alertas *firing* investigados por requisição; o excesso é descartado (202 com `truncated`)
+    max_pending_investigations: int = Field(default=50, ge=1)  # fila cheia => 503 (o Alertmanager reenvia)
+    # Webhook do Alertmanager: exige `Authorization: Bearer <token>`. Sem token, falha fechado (503),
+    # a menos que webhook_allow_unauthenticated=true seja definido explicitamente (só desenvolvimento).
+    webhook_token: SecretStr = SecretStr("")
+    webhook_allow_unauthenticated: bool = False
     risk_threshold: float = Field(default=0.65, ge=0.0, le=1.0)
     min_baseline_points: int = Field(default=500, ge=1)
     scoreboard_path: str = "eval/scoreboard.json"

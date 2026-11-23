@@ -89,3 +89,28 @@ async def run_investigation(
             await hook(incident_id, rca)
         except Exception as exc:  # noqa: BLE001
             log.warning(t.AVISO_HOOK_RCA_FALHOU.format(tipo=type(exc).__name__))
+
+
+def spawn_investigation(state, incident_id: int, alert: Alert) -> asyncio.Task:
+    """Investigação em tarefa própria, rastreada em `state.investigation_tasks` (corre em paralelo,
+    limitada pelo semáforo, e é cancelada no desligamento; o cancelamento marca o incidente falho)."""
+    task = asyncio.create_task(
+        run_investigation(
+            incident_id,
+            alert,
+            state.store,
+            state.investigator,
+            state.memory,
+            state.settings.investigation_timeout_seconds,
+            state.investigation_semaphore,
+            state.rca_hooks,
+        )
+    )
+    tasks: set[asyncio.Task] = state.investigation_tasks
+    tasks.add(task)
+    task.add_done_callback(tasks.discard)
+    return task
+
+
+def investigation_queue_full(state) -> bool:
+    return len(state.investigation_tasks) >= state.settings.max_pending_investigations

@@ -50,7 +50,17 @@ AVISO_HOOK_RCA_FALHOU = "hook on_rca_ready falhou ({tipo})"
 AVISO_MEMORIA_FALHOU = "não foi possível salvar o incidente na memória ({tipo})"
 AVISO_STORE_EM_MEMORIA = "AISRE_DATABASE_URL não definido: incidentes ficam apenas em memória e são perdidos ao reiniciar."
 ERRO_WEBHOOK_MUITO_GRANDE = "Corpo da requisição excede o limite de {limite} bytes."
-ERRO_WEBHOOK_ALERTAS_DEMAIS = "Payload com {total} alertas; o máximo por requisição é {limite}."
+AVISO_WEBHOOK_TRUNCADO = "payload com {total} alertas firing; só os {limite} primeiros serão investigados"
+ERRO_WEBHOOK_NAO_CONFIGURADO = (
+    "Webhook sem autenticação configurada: defina AISRE_WEBHOOK_TOKEN (recomendado) ou, só em "
+    "desenvolvimento, AISRE_WEBHOOK_ALLOW_UNAUTHENTICATED=true."
+)
+ERRO_WEBHOOK_NAO_AUTORIZADO = "Token do webhook ausente ou inválido."
+AVISO_WEBHOOK_SEM_AUTENTICACAO = (
+    "AISRE_WEBHOOK_ALLOW_UNAUTHENTICATED=true sem AISRE_WEBHOOK_TOKEN: o webhook aceita qualquer requisição."
+)
+ERRO_FILA_INVESTIGACOES_CHEIA = "Fila de investigações cheia; tente novamente mais tarde."
+AVISO_FILA_INVESTIGACOES_CHEIA = "fila de investigações cheia ({limite}); alerta recusado para reenvio"
 ERRO_TEXTO_INVALIDO = "texto inválido (caractere nulo ou codificação inválida)"
 ERRO_ARMAZENAMENTO_INDISPONIVEL = "Falha ao registrar um ou mais alertas; tente novamente."
 ERRO_INVESTIGACAO_INTERROMPIDA = "A investigação foi interrompida (reinício ou desligamento do serviço)."

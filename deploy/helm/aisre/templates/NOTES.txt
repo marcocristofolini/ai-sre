@@ -8,8 +8,9 @@ Acesso ao dashboard (sem Ingress):
   Para um teste local use --set auth.cookieSecure=false (nunca em produção).
 {{- end }}
 
-Alerta de teste (Alertmanager/webhook):
+Alerta de teste (Alertmanager/webhook; o token é a chave webhook-token do Secret):
   curl -X POST http://localhost:8080/alerts/webhook -H 'Content-Type: application/json' \
+    -H "Authorization: Bearer $AISRE_WEBHOOK_TOKEN" \
     -d '{"alerts":[{"status":"firing","labels":{"alertname":"TesteAlerta","namespace":"default"},"startsAt":"2026-01-01T00:00:00Z"}]}'
 
 {{- if and (eq .Values.llm.provider "anthropic") (not .Values.llm.externalConsent) }}
@@ -35,10 +36,18 @@ Observação: se llm.local.url apontar para fora do cluster/rede privada, o app 
 e também exige llm.externalConsent=true.
 {{- end }}
 
-SEGURANÇA: /alerts/webhook NÃO tem autenticação na v1. Não o exponha publicamente; use
-networkPolicy.enabled=true com networkPolicy.ingressFrom (ex.: só o Alertmanager) ou restrinja o Ingress.
+SEGURANÇA: /alerts/webhook exige "Authorization: Bearer <token>" (chave webhook-token do Secret).
+Sem a chave, o webhook responde 503 (falha fechado). No Alertmanager use http_config.authorization (veja o README).
+{{- if .Values.webhook.allowUnauthenticated }}
+  AVISO: webhook.allowUnauthenticated=true: sem webhook-token, QUALQUER cliente abre incidentes (e gasta LLM).
+  Use só em desenvolvimento.
+{{- end }}
+{{- if .Values.ingress.enabled }}
+  AVISO: com o Ingress habilitado e path "/", /alerts/webhook também fica alcançável por fora (com token).
+  Prefira que o Alertmanager use o Service interno e bloqueie /alerts/webhook no controlador de Ingress.
+{{- end }}
 {{- if not .Values.networkPolicy.enabled }}
-  (networkPolicy.enabled=false: qualquer pod do cluster alcança o webhook.)
+  (networkPolicy.enabled=false: qualquer pod do cluster alcança o serviço.)
 {{- end }}
 O produto só sugere comandos e registra aprovações; nada é executado. O RBAC é somente leitura (get/list/watch
 em pods, nodes e events).

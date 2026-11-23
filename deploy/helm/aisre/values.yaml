@@ -15,6 +15,7 @@ replicaCount: 1      # v1: 1 réplica (limitador de login e preditivo vivem em m
 #   slack-bot-token      token do bot do Slack
 #   slack-signing-secret segredo de assinatura do Slack
 #   github-token         token somente leitura do GitHub
+#   webhook-token        token Bearer exigido em /alerts/webhook (sem ele o webhook responde 503)
 secrets:
   existingSecret: ""   # nome de um Secret já existente no namespace (recomendado)
   create: false        # true = o chart cria o Secret, SOMENTE com os valores abaixo que você informar
@@ -25,6 +26,7 @@ secrets:
     slackBotToken: ""
     slackSigningSecret: ""
     githubToken: ""
+    webhookToken: ""
 
 llm:
   provider: local          # anthropic | local
@@ -47,6 +49,11 @@ loki:
   url: ""
 github:
   repo: ""                 # owner/repo; o token vem do Secret (github-token)
+
+webhook:
+  # O token vem do Secret (chave webhook-token). Sem token o webhook falha fechado (503).
+  # true SÓ em desenvolvimento: aceita alertas sem autenticação quando não há token.
+  allowUnauthenticated: false
 
 kubernetes:
   enabled: true            # liga a ferramenta kubernetes e o RBAC somente leitura
@@ -79,7 +86,8 @@ ingress:
         - path: /
           pathType: Prefix
   tls: []
-  # Não exponha /alerts/webhook publicamente (sem autenticação na v1); restrinja por path/origem.
+  # Com path "/" o Ingress também expõe /alerts/webhook (protegido por token Bearer). Para o Alertmanager,
+  # prefira o Service interno e bloqueie /alerts/webhook no controlador de Ingress (veja o README).
 
 serviceAccount:
   create: true

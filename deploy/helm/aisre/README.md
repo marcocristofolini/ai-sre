@@ -61,12 +61,13 @@ Nenhum segredo tem valor padrão no chart. Chaves do Secret da aplicação (`sec
 | `slack-bot-token` | não | token do bot do Slack |
 | `slack-signing-secret` | não | segredo de assinatura das ações do Slack |
 | `github-token` | não | token **somente leitura** do GitHub |
+| `webhook-token` | sim, para receber alertas | token Bearer exigido em `/alerts/webhook` (sem ele: 503) |
 
 Gere o hash da senha e o segredo de sessão com o utilitário do app (a senha é lida sem eco):
 
 ```bash
 python -m aisre.auth hash      # imprime o hash scrypt
-python -m aisre.auth secret    # imprime um segredo aleatório para a sessão
+python -m aisre.auth secret    # imprime um segredo aleatório para a sessão (use também para o webhook-token)
 ```
 
 ```bash
@@ -75,7 +76,8 @@ kubectl -n aisre create secret generic aisre-secrets \
   --from-literal=session-secret='...' \
   --from-literal=slack-bot-token='xoxb-...' \
   --from-literal=slack-signing-secret='...' \
-  --from-literal=github-token='...'
+  --from-literal=github-token='...' \
+  --from-literal=webhook-token="$(openssl rand -hex 32)"
 kubectl -n aisre create secret generic aisre-postgres \
   --from-literal=postgres-password="$(openssl rand -hex 24)"
 ```
@@ -135,7 +137,9 @@ Formato do Alertmanager (campos aceitos: `alerts[].status`, `alerts[].labels` co
 só alertas `firing` abrem incidente):
 
 ```bash
-curl -X POST http://localhost:8080/alerts/webhook -H 'Content-Type: application/json' -d '{
+TOKEN=$(kubectl -n aisre get secret aisre-secrets -o jsonpath='{.data.webhook-token}' | base64 -d)
+curl -X POST http://localhost:8080/alerts/webhook -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $TOKEN" -d '{
   "alerts": [{
     "status": "firing",
     "labels": {"alertname": "TesteAlerta", "namespace": "default", "pod": "meu-pod"},
@@ -144,7 +148,30 @@ curl -X POST http://localhost:8080/alerts/webhook -H 'Content-Type: application/
 }'
 ```
 
-Resposta `202` com o `incident_id`; o RCA aparece no dashboard quando a investigação termina.
+Resposta `202` com o `incident_id`; o RCA aparece no dashboard quando a investigação termina. Sem o token
+correto a resposta é `401`; sem `webhook-token` configurado, `503` (falha fechado). Só alertas `firing` contam
+para `AISRE_MAX_ALERTS_PER_REQUEST`: o excesso é descartado com `202` e o campo `truncated` (o Alertmanager não
+reenvia respostas 4xx). Com a fila de investigações cheia (`AISRE_MAX_PENDING_INVESTIGATIONS`), `503` (o
+Alertmanager reenvia).
+
+### Configurando o Alertmanager
+
+Monte o token num Secret do namespace do Alertmanager e use `http_config.authorization`:
+
+```yaml
+receivers:
+  - name: aisre
+    webhook_configs:
+      - url: http://aisre.aisre.svc/alerts/webhook   # Service interno, não o Ingress
+        send_resolved: false
+        http_config:
+          authorization:
+            type: Bearer
+            credentials_file: /etc/alertmanager/secrets/aisre-webhook/token
+```
+
+`webhook.allowUnauthenticated=true` aceita alertas sem token quando `webhook-token` não existe: **só em
+desenvolvimento**.
 
 ## Segurança
 
@@ -152,10 +179,18 @@ Resposta `202` com o `incident_id`; o RCA aparece no dashboard quando a investig
   ferramenta `kubernetes` lê). Não há acesso a `secrets` nem verbos de escrita.
 - v1 só **sugere** comandos e **registra** a aprovação humana; nada é executado no cluster.
 - Contêineres: `runAsNonRoot`, `readOnlyRootFilesystem` (app), capabilities `ALL` removidas, seccomp `RuntimeDefault`.
-- **Limitação conhecida: `/alerts/webhook` está sem autenticação** na v1. Qualquer cliente que alcance o serviço pode
-  abrir incidentes (e gastar chamadas de LLM). Até existir um segredo compartilhado: não exponha esse caminho
-  publicamente, habilite `networkPolicy.enabled=true` com `networkPolicy.ingressFrom` listando só o Alertmanager,
-  e restrinja o Ingress (ou não habilite Ingress e use o Service interno).
+- `/alerts/webhook` exige `Authorization: Bearer <webhook-token>` (comparação em tempo constante); requisições
+  sem autenticação são recusadas (`401`), e sem token configurado o webhook falha fechado (`503`). A fila de
+  investigações é limitada (`AISRE_MAX_PENDING_INVESTIGATIONS`) para conter abuso de custo de LLM.
+- O Ingress padrão (`path: /`) também expõe `/alerts/webhook`. O Slack precisa de `/slack/actions` público, então
+  restringir só por NetworkPolicy não basta. Recomendado: o Alertmanager usa o Service interno e o controlador de
+  Ingress bloqueia `/alerts/webhook` (ex.: ingress-nginx com `nginx.ingress.kubernetes.io/server-snippet:
+  "location = /alerts/webhook { return 404; }"`, se snippets estiverem permitidos, ou uma regra equivalente do seu
+  controlador). Não verificado em cluster real.
+- `networkPolicy.enabled=true` com `networkPolicy.ingressFrom` limita quem alcança o serviço dentro do cluster
+  (inclua o controlador de Ingress se usar Ingress).
+- O texto do RCA e o comando sugerido vêm de um LLM lendo dados não confiáveis (rótulos, logs): revise o comando
+  antes de executá-lo manualmente.
 - `/slack/actions` valida a assinatura do Slack; o dashboard exige login.
 
 ## Limitações conhecidas

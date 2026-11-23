@@ -59,7 +59,10 @@ def test_machine_endpoints_do_not_need_a_session():
     client, _, _ = _app(slack_bot_token="x", slack_signing_secret="s", slack_channel="C")
     assert client.get("/healthz").status_code == 200
     alert = {"status": "firing", "labels": {"alertname": "X"}, "startsAt": "2026-11-23T10:00:00Z"}
-    assert client.post("/alerts/webhook", json={"alerts": [alert]}).status_code == 202
+    # Sem sessão, mas com o token do webhook (autenticação de máquina, não de sessão).
+    from authhelp import WEBHOOK_HEADERS
+    assert client.post("/alerts/webhook", json={"alerts": [alert]}).status_code == 401
+    assert client.post("/alerts/webhook", json={"alerts": [alert]}, headers=WEBHOOK_HEADERS).status_code == 202
     r = client.post("/slack/actions", content=b"payload=%7B%7D")
     assert r.status_code == 401 and "Slack" in r.json()["detail"]  # recusado pela assinatura, não pela sessão
 

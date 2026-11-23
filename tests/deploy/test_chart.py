@@ -263,16 +263,17 @@ def test_every_aisre_env_var_is_a_real_setting():
         "PROMETHEUS_URL", "LOKI_URL", "SLACK_APPROVERS", "SLACK_CHANNEL", "SLACK_BOT_TOKEN",
         "SLACK_SIGNING_SECRET", "GITHUB_REPO", "GITHUB_TOKEN", "ADMIN_USER", "ADMIN_PASSWORD_HASH",
         "SESSION_SECRET", "SESSION_COOKIE_SECURE", "PREDICT_WORKLOADS", "KUBERNETES_ENABLED", "WEB_DIST_DIR",
+        "WEBHOOK_TOKEN", "WEBHOOK_ALLOW_UNAUTHENTICATED",
     ):
         assert must in found, must
 
 
 def test_secret_env_vars_come_from_secret_refs_not_configmap():
     cm = (TEMPLATES / "configmap.yaml").read_text(encoding="utf-8")
-    for s in ("LLM_API_KEY", "SLACK_BOT_TOKEN", "SLACK_SIGNING_SECRET", "GITHUB_TOKEN", "ADMIN_PASSWORD_HASH", "SESSION_SECRET", "DATABASE_URL"):
+    for s in ("LLM_API_KEY", "SLACK_BOT_TOKEN", "SLACK_SIGNING_SECRET", "GITHUB_TOKEN", "ADMIN_PASSWORD_HASH", "SESSION_SECRET", "DATABASE_URL", "WEBHOOK_TOKEN"):
         assert not re.search(rf"^\s*AISRE_{s}:", cm, flags=re.M), s
     dep = (TEMPLATES / "deployment.yaml").read_text(encoding="utf-8")
-    assert dep.count("secretKeyRef") >= 6
+    assert dep.count("secretKeyRef") >= 7
 
 
 def test_postgres_can_be_replaced_by_external():
@@ -301,9 +302,33 @@ def test_readme_documents_required_topics():
     readme = (CHART / "README.md").read_text(encoding="utf-8")
     for needle in (
         "helm install aisre deploy/helm/aisre", "python -m aisre.auth hash", "python -m aisre.auth secret",
-        "/alerts/webhook", "externalConsent", "NetworkPolicy", "NÃO foi verificado", "sem autenticação",
+        "/alerts/webhook", "externalConsent", "NetworkPolicy", "NÃO foi verificado",
+        # C2: o webhook agora exige token; o README documenta a chave, o curl e o Alertmanager.
+        "webhook-token", "Authorization: Bearer", "http_config", "credentials_file", "allowUnauthenticated",
     ):
         assert needle in readme, needle
+    assert "está sem autenticação" not in readme  # afirmação antiga, não vale mais
+
+
+def test_webhook_token_secret_key_is_wired_without_default():
+    v = _values()
+    assert v["secrets"]["values"]["webhookToken"] == ""
+    assert v["webhook"]["allowUnauthenticated"] is False
+    secret = (TEMPLATES / "secret.yaml").read_text(encoding="utf-8")
+    assert re.search(r"if \$v\.webhookToken \}\}\s*\n\s*webhook-token: \{\{ \$v\.webhookToken \| quote \}\}", secret)
+    dep = (TEMPLATES / "deployment.yaml").read_text(encoding="utf-8")
+    assert re.search(
+        r"name: AISRE_WEBHOOK_TOKEN\s*\n\s*valueFrom:\s*\n\s*secretKeyRef:\s*\n\s*name: \{\{ include \"aisre\.secretName\" \. \}\}\s*\n\s*key: webhook-token",
+        dep,
+    )
+    cm = (TEMPLATES / "configmap.yaml").read_text(encoding="utf-8")
+    assert not re.search(r"^\s*AISRE_WEBHOOK_TOKEN:", cm, flags=re.M)
+    assert re.search(r"AISRE_WEBHOOK_ALLOW_UNAUTHENTICATED:\s*\{\{\s*\.Values\.webhook\.allowUnauthenticated\s*\|\s*quote\s*\}\}", cm)
+    guard = set(re.findall(r'"(AISRE_[A-Z_]+)"', cm))
+    assert {"AISRE_WEBHOOK_TOKEN", "AISRE_WEBHOOK_ALLOW_UNAUTHENTICATED"} <= guard
+    notes = (TEMPLATES / "NOTES.txt").read_text(encoding="utf-8")
+    assert "Authorization: Bearer" in notes and "NÃO tem autenticação" not in notes
+    assert ".Values.webhook.allowUnauthenticated" in notes and ".Values.ingress.enabled" in notes
 
 
 # ---------------------------------------------------------------- renderização (exige helm)
@@ -371,3 +396,18 @@ def test_rendered_lists_are_json_and_local_model_omitted_when_empty():
     assert cm["data"]["AISRE_SLACK_APPROVERS"] == '["U1"]'
     assert cm["data"]["AISRE_PREDICT_WORKLOADS"] == "[]"
     assert "AISRE_LLM_MODEL" not in cm["data"]
+
+
+@needs_helm
+def test_rendered_webhook_token_and_allow_unauthenticated_default_false():
+    docs = _render()
+    cm = next(d for d in docs if d["kind"] == "ConfigMap")
+    assert cm["data"]["AISRE_WEBHOOK_ALLOW_UNAUTHENTICATED"] == "false"
+    dep = next(d for d in docs if d["kind"] == "Deployment")
+    env = {e["name"]: e for e in dep["spec"]["template"]["spec"]["containers"][0]["env"]}
+    assert env["AISRE_WEBHOOK_TOKEN"]["valueFrom"]["secretKeyRef"]["key"] == "webhook-token"
+    r = subprocess.run(
+        [HELM, "template", "aisre", str(CHART), *MIN_ARGS, "--set-string", "extraEnv.AISRE_WEBHOOK_ALLOW_UNAUTHENTICATED=true"],
+        capture_output=True, text=True, timeout=60,
+    )
+    assert r.returncode != 0

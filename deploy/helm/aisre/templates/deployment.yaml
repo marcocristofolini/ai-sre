@@ -91,6 +91,12 @@ spec:
                   name: {{ include "aisre.secretName" . }}
                   key: github-token
                   optional: true
+            - name: AISRE_WEBHOOK_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "aisre.secretName" . }}
+                  key: webhook-token
+                  optional: true  # ausente => o app recusa o webhook com 503 (falha fechado)
           livenessProbe:
             httpGet:
               path: /healthz
