@@ -1,0 +1,35 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: aisre-crashloop-bad-config
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: aisre-crashloop-bad-config
+data:
+  app.conf: "port = not-a-number"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app
+  namespace: aisre-crashloop-bad-config
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: app}
+  template:
+    metadata:
+      labels: {app: app}
+    spec:
+      containers:
+        - name: app
+          image: busybox:1.36
+          command: ["sh", "-c", "echo 'config-error: invalid port in /etc/app/app.conf' >&2; exit 1"]
+          volumeMounts:
+            - {name: cfg, mountPath: /etc/app}
+      volumes:
+        - name: cfg
+          configMap: {name: app-config}
