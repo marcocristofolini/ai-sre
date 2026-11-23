@@ -208,11 +208,17 @@ No dashboard, o admin local (`auth.adminUser`) pode aprovar **independentemente*
 - `/alerts/webhook` exige `Authorization: Bearer <webhook-token>` (comparação em tempo constante); requisições
   sem autenticação são recusadas (`401`), e sem token configurado o webhook falha fechado (`503`). A fila de
   investigações é limitada (`AISRE_MAX_PENDING_INVESTIGATIONS`) para conter abuso de custo de LLM.
-- O Ingress padrão (`path: /`) também expõe `/alerts/webhook`. O Slack precisa de `/slack/actions` público, então
-  restringir só por NetworkPolicy não basta. Recomendado: o Alertmanager usa o Service interno e o controlador de
-  Ingress bloqueia `/alerts/webhook` (ex.: ingress-nginx com `nginx.ingress.kubernetes.io/server-snippet:
-  "location = /alerts/webhook { return 404; }"`, se snippets estiverem permitidos, ou uma regra equivalente do seu
-  controlador). Não verificado em cluster real.
+- O Ingress **não** expõe `/alerts/webhook` por padrão. Como regras de Ingress não "subtraem" um caminho de `/`,
+  o chart publica só `/` (`Exact`, o `index.html`) e os prefixos de `ingress.publicPrefixes` (`/auth`, `/incidents`,
+  `/risk`, `/scoreboard`, `/integrations`, `/healthz`, `/assets`), mais `/slack/actions` com `slack.enabled=true`
+  (o Interactivity do Slack precisa de URL pública). O Alertmanager usa o Service interno; `ingress.webhook.enabled=true`
+  publica o webhook (com token, mas alcançável pela internet). Tradeoff: uma rota nova do app ou do dashboard
+  não fica pública até entrar em `publicPrefixes`; `ingress.hosts[].paths` deixou de existir (o chart falha se usado).
+  Não verificado em cluster real nem com `helm template` neste ambiente.
+- Rotação de segredos: com `secrets.create=true` o pod recebe a anotação `checksum/secret` (hash do conteúdo dos
+  Secrets criados pelo chart) e reinicia quando um valor muda. Com `secrets.existingSecret` o chart não enxerga o
+  conteúdo: após rotacionar, rode `kubectl -n aisre rollout restart deploy/aisre` ou altere uma anotação em
+  `podAnnotations`. O Postgres não é reiniciado pelo chart.
 - `networkPolicy.enabled=true` com `networkPolicy.ingressFrom` limita quem alcança o serviço dentro do cluster
   (inclua o controlador de Ingress se usar Ingress).
 - O texto do RCA e o comando sugerido vêm de um LLM lendo dados não confiáveis (rótulos, logs): revise o comando

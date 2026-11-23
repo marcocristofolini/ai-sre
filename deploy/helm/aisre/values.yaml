@@ -40,6 +40,7 @@ llm:
     model: ""              # obrigatório na prática com provider=local (vazio: AISRE_LLM_MODEL não é emitido)
 
 slack:
+  enabled: false           # true = o Ingress publica /slack/actions (o Slack precisa alcançá-lo por URL pública)
   channel: ""
   approvers: []            # IDs de usuário do Slack autorizados a aprovar (ex.: ["U012ABC"])
 
@@ -57,6 +58,9 @@ webhook:
 
 kubernetes:
   enabled: true            # liga a ferramenta kubernetes e o RBAC somente leitura
+
+memory:
+  topK: 3                  # incidentes anteriores semelhantes dados ao agente como contexto não confiável; 0 desativa
 
 auth:
   adminUser: admin
@@ -93,12 +97,24 @@ ingress:
   annotations: {}
   hosts:
     - host: aisre.example.com
-      paths:
-        - path: /
-          pathType: Prefix
   tls: []
-  # Com path "/" o Ingress também expõe /alerts/webhook (protegido por token Bearer). Para o Alertmanager,
-  # prefira o Service interno e bloqueie /alerts/webhook no controlador de Ingress (veja o README).
+  # O Ingress NÃO expõe /alerts/webhook por padrão. Regras de Ingress não conseguem "subtrair" um caminho
+  # de "/", então só os caminhos que o dashboard realmente usa são publicados: "/" EXATO (index.html) e os
+  # prefixos abaixo (rotas da API em src/aisre/api e os assets do build em web/dist/assets). Se o dashboard
+  # ganhar uma rota nova, ela NÃO fica pública até entrar aqui. Rotas por hash (#/incidentes) não chegam ao servidor.
+  publicPrefixes:
+    - /auth
+    - /incidents
+    - /risk
+    - /scoreboard
+    - /integrations
+    - /healthz
+    - /assets
+  # /slack/actions (Interactivity do Slack) só é publicado com slack.enabled=true (veja `slack:` acima).
+  webhook:
+    # true publica /alerts/webhook (exige token Bearer, mas fica alcançável pela internet: abre superficie
+    # de abuso de custo de LLM). Prefira que o Alertmanager use o Service interno.
+    enabled: false
 
 serviceAccount:
   create: true
@@ -129,6 +145,10 @@ resources:
 nodeSelector: {}
 tolerations: []
 affinity: {}
+# Anotações extras do pod. Rotação de segredos: com secrets.create=true o chart já reinicia o pod quando o
+# conteúdo muda (checksum/secret). Com secrets.existingSecret o chart NÃO vê o conteúdo: depois de rotacionar,
+# rode `kubectl rollout restart deploy/<release>-aisre` ou mude uma anotação aqui, ex.:
+#   --set-string podAnnotations.secret-rotated-at=2026-11-23
 podAnnotations: {}
 
 # NetworkPolicy opcional. Com enabled=true: o app só aceita entrada dos peers em ingressFrom

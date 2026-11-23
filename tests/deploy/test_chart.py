@@ -354,6 +354,46 @@ def test_webhook_token_secret_key_is_wired_without_default():
     assert ".Values.webhook.allowUnauthenticated" in notes and ".Values.ingress.enabled" in notes
 
 
+def test_ingress_does_not_expose_webhook_by_default_static():
+    v = _values()
+    ing = v["ingress"]
+    assert ing["webhook"]["enabled"] is False and v["slack"]["enabled"] is False
+    assert all("alerts" not in p for p in ing["publicPrefixes"])
+    assert all("paths" not in h for h in ing["hosts"])
+    assert set(ing["publicPrefixes"]) == {
+        "/auth", "/incidents", "/risk", "/scoreboard", "/integrations", "/healthz", "/assets"}
+    tpl = (TEMPLATES / "ingress.yaml").read_text(encoding="utf-8")
+    # o webhook só aparece dentro do `if` que o liga; slack idem
+    assert re.search(r"\{\{-? if \$\.Values\.ingress\.webhook\.enabled \}\}\s*\n\s*- path: /alerts/webhook", tpl)
+    assert re.search(r"\{\{-? if \$\.Values\.slack\.enabled \}\}\s*\n\s*- path: /slack/actions", tpl)
+    assert "path: /\n            pathType: Exact" in tpl
+
+
+def test_public_prefixes_match_real_app_routes():
+    """Cada prefixo público existe de fato na app; o webhook não está entre eles."""
+    api = (ROOT / "src" / "aisre" / "api")
+    src = "\n".join(p.read_text(encoding="utf-8") for p in api.glob("*.py"))
+    for prefix in _values()["ingress"]["publicPrefixes"]:
+        if prefix == "/assets":  # montagem estática do build do dashboard
+            assert (ROOT / "web" / "vite.config.ts").is_file()
+            continue
+        assert f'"{prefix}' in src, prefix
+
+
+def test_deployment_has_secret_checksum_and_docs_for_existing_secret():
+    dep = (TEMPLATES / "deployment.yaml").read_text(encoding="utf-8")
+    assert re.search(r'checksum/secret: \{\{ include \(print \$\.Template\.BasePath "/secret\.yaml"\) \. \| sha256sum \}\}', dep)
+    values = (CHART / "values.yaml").read_text(encoding="utf-8")
+    assert "rollout restart" in values and "podAnnotations" in values
+    assert "rollout restart" in (CHART / "README.md").read_text(encoding="utf-8")
+
+
+def test_memory_top_k_wired_to_a_real_setting():
+    assert _values()["memory"]["topK"] == 3
+    cm = (TEMPLATES / "configmap.yaml").read_text(encoding="utf-8")
+    assert "AISRE_MEMORY_TOP_K: {{ .Values.memory.topK | quote }}" in cm
+
+
 # ---------------------------------------------------------------- renderização (exige helm)
 
 MIN_ARGS = [
@@ -435,3 +475,26 @@ def test_rendered_webhook_token_and_allow_unauthenticated_default_false():
         capture_output=True, text=True, timeout=60,
     )
     assert r.returncode != 0
+
+
+@needs_helm
+def test_rendered_ingress_excludes_webhook_by_default_and_opt_in():
+    def paths(*extra):
+        docs = _render("--set", "ingress.enabled=true", *extra)
+        ing = next(d for d in docs if d["kind"] == "Ingress")
+        return [(p["path"], p["pathType"]) for p in ing["spec"]["rules"][0]["http"]["paths"]]
+
+    base = paths()
+    assert ("/", "Exact") in base and all(p != "/alerts/webhook" and p != "/slack/actions" for p, _ in base)
+    assert ("/slack/actions", "Exact") in paths("--set", "slack.enabled=true")
+    assert ("/alerts/webhook", "Exact") in paths("--set", "ingress.webhook.enabled=true")
+
+
+@needs_helm
+def test_rendered_secret_checksum_changes_with_secret_content():
+    def checksum(value):
+        docs = _render("--set", "secrets.create=true", "--set", f"secrets.values.sessionSecret={value}")
+        dep = next(d for d in docs if d["kind"] == "Deployment")
+        return dep["spec"]["template"]["metadata"]["annotations"]["checksum/secret"]
+
+    assert checksum("a") != checksum("b") and checksum("a") == checksum("a")

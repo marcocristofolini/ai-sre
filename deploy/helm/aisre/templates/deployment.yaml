@@ -15,6 +15,9 @@ spec:
     metadata:
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- /* Cobre o conteúdo dos Secrets criados pelo chart (secrets.create / postgres.external.url): trocar
+               um valor reinicia o pod. Secrets existentes (existingSecret) NÃO entram: veja o README. */}}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
         {{- with .Values.podAnnotations }}
         {{- toYaml . | nindent 8 }}
         {{- end }}

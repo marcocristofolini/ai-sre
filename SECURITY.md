@@ -27,9 +27,11 @@ impacto. Não teste contra instalações de terceiros.
 
 - Não verificado em cluster real, com modelo real, nem com o chart instalado; o placar de precisão ainda não existe.
 - A redação de segredos é baseada em padrões: segredos em formatos desconhecidos podem passar.
-- O Ingress padrão (`path: /`) também expõe `/alerts/webhook` (protegido por token); bloqueie-o no controlador de
-  Ingress se o Alertmanager usar o Service interno (veja o README do chart).
+- O Ingress do chart não publica `/alerts/webhook` por padrão (só `/` exato, prefixos do dashboard/API e, com
+  `slack.enabled`, `/slack/actions`); `ingress.webhook.enabled=true` o publica (protegido por token). Não verificado
+  com `helm template` neste ambiente.
 - O limite de login e a deduplicação vivem em memória (1 réplica). Atrás de proxy, configure
   `proxy.forwardedAllowIps` / `FORWARDED_ALLOW_IPS`, senão todos os clientes parecem vir do IP do proxy.
 - O admin do dashboard pode aprovar independentemente de `AISRE_SLACK_APPROVERS`.
-- Sem rotação de segredos, backup do Postgres ou restrição de egress no chart.
+- Sem backup do Postgres nem restrição de egress no chart. Rotação de segredos: o chart reinicia o pod só para
+  Secrets criados por ele; com `existingSecret` é preciso `rollout restart` (veja o README do chart).

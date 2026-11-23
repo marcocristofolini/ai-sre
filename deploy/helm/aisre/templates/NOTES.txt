@@ -43,8 +43,15 @@ Sem a chave, o webhook responde 503 (falha fechado). No Alertmanager use http_co
   Use só em desenvolvimento.
 {{- end }}
 {{- if .Values.ingress.enabled }}
-  AVISO: com o Ingress habilitado e path "/", /alerts/webhook também fica alcançável por fora (com token).
-  Prefira que o Alertmanager use o Service interno e bloqueie /alerts/webhook no controlador de Ingress.
+  Ingress: publica só "/" (exato) e {{ join ", " .Values.ingress.publicPrefixes }}{{ if .Values.slack.enabled }}, /slack/actions{{ end }}.
+{{- if .Values.ingress.webhook.enabled }}
+  AVISO: ingress.webhook.enabled=true: /alerts/webhook está alcançável por fora (com token). Prefira o Service interno.
+{{- else }}
+  /alerts/webhook NÃO é exposto pelo Ingress: o Alertmanager deve usar o Service interno.
+{{- end }}
+{{- if not .Values.slack.enabled }}
+  /slack/actions NÃO é exposto (slack.enabled=false): os botões do Slack não funcionarão por fora do cluster.
+{{- end }}
 {{- end }}
 {{- if not .Values.networkPolicy.enabled }}
   (networkPolicy.enabled=false: qualquer pod do cluster alcança o serviço.)
