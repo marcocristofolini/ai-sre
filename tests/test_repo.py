@@ -78,7 +78,7 @@ def test_release_workflow_publishes_image_and_chart_safely():
     uses += [job["uses"] for job in jobs.values() if "uses" in job and not job["uses"].startswith("./")]
     assert all(re.fullmatch(r"[\w./-]+@v\d+", u) for u in uses), uses
     code = "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("#"))
-    assert "secrets.GITHUB_TOKEN" in code and code.count("secrets.") == code.count("secrets.GITHUB_TOKEN")
+    assert "secrets.GITHUB_TOKEN" in code and code.count("${{ secrets.") == code.count("${{ secrets.GITHUB_TOKEN")
     assert "latest=false" in text and "pull_request_target" not in text
     assert set(jobs["imagem"]["needs"]) >= {"verificar", "testes"}
     assert set(jobs["chart"]["needs"]) >= {"imagem"}
