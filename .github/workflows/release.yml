@@ -1,0 +1,94 @@
+# Release do AI SRE: a cada tag `vX.Y.Z` publica a imagem Docker e o chart Helm (OCI) no GitHub Container Registry.
+# NÃO foi executado no ambiente de desenvolvimento: primeira execução real pendente. Versões das ações fixadas por tag
+# maior; usa apenas o GITHUB_TOKEN (nenhum segredo extra). Pacotes novos no GHCR nascem PRIVADOS: depois do primeiro
+# release, torne-os públicos em Packages > Configurações do pacote, se for o desejado.
+name: release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verificar:
+    name: tag coincide com as versões
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          py=$(python3 -c "import tomllib;print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          chart=$(grep -E '^appVersion:' deploy/helm/aisre/Chart.yaml | sed -E 's/appVersion:[[:space:]]*"?([^"]+)"?/\1/')
+          echo "tag=$version pyproject=$py chart.appVersion=$chart"
+          test "$version" = "$py" && test "$version" = "$chart" || { echo "A tag, o pyproject.toml e o appVersion do chart precisam ter a mesma versão."; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  testes:
+    needs: verificar
+    uses: ./.github/workflows/ci.yml
+
+  imagem:
+    name: imagem Docker (GHCR)
+    needs: [verificar, testes]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          # A tag da imagem é a versão sem o "v" (o chart usa appVersion), sem `latest` (o chart o recusa).
+          tags: |
+            type=raw,value=${{ needs.verificar.outputs.version }}
+          flavor: latest=false
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  chart:
+    name: chart Helm (OCI no GHCR)
+    needs: [verificar, testes, imagem]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.16.4
+      - name: empacotar e publicar
+        env:
+          VERSION: ${{ needs.verificar.outputs.version }}
+          ACTOR: ${{ github.actor }}
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          owner=$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')
+          helm lint deploy/helm/aisre --set secrets.existingSecret=x --set postgres.auth.existingSecret=y
+          helm package deploy/helm/aisre --version "$VERSION" --app-version "$VERSION" --destination dist
+          echo "$TOKEN" | helm registry login ghcr.io --username "$ACTOR" --password-stdin
+          helm push "dist/aisre-${VERSION}.tgz" "oci://ghcr.io/${owner}/charts"

@@ -17,9 +17,12 @@ opcionalmente, um Postgres com pgvector. Um cliente por instalação; os dados f
 ```bash
 kubectl create namespace aisre
 # crie os Secrets (próxima seção) e então:
-helm install aisre deploy/helm/aisre -n aisre -f meus-valores.yaml \
-  --set image.repository=REGISTRO/aisre
+helm install aisre deploy/helm/aisre -n aisre -f meus-valores.yaml
 ```
+
+O `image.repository` padrão é `ghcr.io/marcocristofolini/ai-sre`, publicado pelo workflow de release (veja o README da raiz).
+Para usar outro registro/fork: `--set image.repository=REGISTRO/ai-sre`. Depois de um release, o chart também fica disponível em
+`oci://ghcr.io/marcocristofolini/charts/aisre` (`helm install aisre oci://ghcr.io/marcocristofolini/charts/aisre --version X.Y.Z ...`).
 
 Exemplo mínimo de `meus-valores.yaml` (sem segredos):
 

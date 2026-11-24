@@ -186,6 +186,19 @@ rede e nenhum foi inventado. Para fixar por digest: `docker buildx imagetools in
 `helm template` / testes de renderização com Helm fixo (`azure/setup-helm`). Permissões `contents: read`, sem
 segredos. **Nunca foi executado** (escrito sem acesso ao GitHub Actions).
 
+## Releases (imagem Docker e chart Helm)
+
+O workflow `.github/workflows/release.yml` roda ao empurrar uma tag `vX.Y.Z`:
+
+1. confere que a tag, o `version` do `pyproject.toml` e o `appVersion` do chart são iguais (senão falha);
+2. roda o CI inteiro (`ci.yml`);
+3. publica a imagem `ghcr.io/marcocristofolini/ai-sre:X.Y.Z` (sem `latest`);
+4. empacota e publica o chart em `oci://ghcr.io/marcocristofolini/charts/aisre` (versão X.Y.Z).
+
+Para lançar: ajuste as versões, faça o commit e `git tag v0.1.0 && git push origin v0.1.0`. Os pacotes novos do GHCR nascem
+**privados**; torne-os públicos nas configurações do pacote se for o desejado. O workflow nunca foi executado (primeira
+execução real pendente) e usa só o `GITHUB_TOKEN`.
+
 ## Pendências
 
 Precisam de infraestrutura real (nada disto foi verificado):

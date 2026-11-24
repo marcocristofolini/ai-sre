@@ -59,3 +59,40 @@ def test_ci_workflow_is_least_privilege_and_covers_python_web_helm():
     for needle in ("pytest tests -W error", "npm --prefix web ci", "npm --prefix web test",
                    "helm lint deploy/helm/aisre", "pytest tests/deploy"):
         assert needle in text, needle
+
+
+def test_release_workflow_publishes_image_and_chart_safely():
+    import yaml
+
+    text = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+    wf = yaml.safe_load(text)
+    assert wf["permissions"] == {"contents": "read"}  # escrita só nos jobs que publicam
+    on = wf.get(True, wf.get("on"))  # PyYAML lê a chave `on` como True
+    assert on == {"push": {"tags": ["v*.*.*"]}}
+    assert "pull_request" not in text
+    jobs = wf["jobs"]
+    assert jobs["imagem"]["permissions"]["packages"] == "write"
+    assert jobs["chart"]["permissions"]["packages"] == "write"
+    assert "packages" not in jobs["verificar"].get("permissions", {})
+    uses = [step["uses"] for job in jobs.values() for step in job.get("steps", []) if "uses" in step]
+    uses += [job["uses"] for job in jobs.values() if "uses" in job and not job["uses"].startswith("./")]
+    assert all(re.fullmatch(r"[\w./-]+@v\d+", u) for u in uses), uses
+    code = "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("#"))
+    assert "secrets.GITHUB_TOKEN" in code and code.count("secrets.") == code.count("secrets.GITHUB_TOKEN")
+    assert "latest=false" in text and "pull_request_target" not in text
+    assert set(jobs["imagem"]["needs"]) >= {"verificar", "testes"}
+    assert set(jobs["chart"]["needs"]) >= {"imagem"}
+    # o chart reutilizável existe e o CI aceita ser chamado
+    ci = yaml.safe_load((ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8"))
+    assert "workflow_call" in ci.get(True, ci.get("on"))
+
+
+def test_chart_default_image_points_to_ghcr_and_versions_agree():
+    import yaml
+
+    values = yaml.safe_load((ROOT / "deploy/helm/aisre/values.yaml").read_text(encoding="utf-8"))
+    assert values["image"]["repository"] == "ghcr.io/marcocristofolini/ai-sre"
+    assert values["image"]["tag"] == ""  # nunca latest; usa appVersion
+    chart = yaml.safe_load((ROOT / "deploy/helm/aisre/Chart.yaml").read_text(encoding="utf-8"))
+    py = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
+    assert chart["appVersion"] == py == chart["version"]

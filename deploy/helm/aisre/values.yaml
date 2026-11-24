@@ -1,7 +1,7 @@
 # Valores padrão do chart aisre. NENHUM segredo tem valor padrão: use Secrets existentes (veja README).
 
 image:
-  repository: aisre
+  repository: ghcr.io/marcocristofolini/ai-sre
   tag: ""            # vazio = appVersion do Chart. Nunca use "latest".
   pullPolicy: IfNotPresent
 imagePullSecrets: []
