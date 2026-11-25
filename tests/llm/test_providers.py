@@ -105,3 +105,48 @@ def test_local_provider_ignores_env_proxy_only_for_local_urls(monkeypatch, url, 
     provider = LocalProvider(url, "m", transport=transport)
     _asyncio.run(provider.complete([], []))
     assert seen["trust_env"] is trust
+
+
+# --- Falhas transit?rias do gateway: retry com backoff ----------------------------------------------------
+
+
+@_pytest.fixture(autouse=True)
+def _sem_espera(monkeypatch):
+    monkeypatch.setattr("aisre.llm.local_provider._RETRY_DELAYS", (0.0, 0.0, 0.0))
+
+
+def test_local_provider_retries_transient_503_then_succeeds():
+    calls = {"n": 0}
+
+    def handler(request):
+        calls["n"] += 1
+        if calls["n"] < 3:
+            return httpx.Response(503, json={"error": {"message": "temporariamente indisponivel"}})
+        return httpx.Response(200, json={"choices": [{"message": {"content": "ok"}}]})
+
+    res = asyncio.run(_local(handler).complete([Message(role="user", content="x")], []))
+    assert res.text == "ok" and calls["n"] == 3
+
+
+def test_local_provider_gives_up_after_retries_without_leaking_body():
+    calls = {"n": 0}
+
+    def handler(request):
+        calls["n"] += 1
+        return httpx.Response(503, text="segredo-no-corpo")
+
+    with _pytest.raises(RuntimeError) as exc:
+        asyncio.run(_local(handler).complete([Message(role="user", content="x")], []))
+    assert calls["n"] == 4 and "segredo-no-corpo" not in str(exc.value)
+
+
+def test_local_provider_does_not_retry_client_errors():
+    calls = {"n": 0}
+
+    def handler(request):
+        calls["n"] += 1
+        return httpx.Response(401, text="nao autorizado")
+
+    with _pytest.raises(RuntimeError):
+        asyncio.run(_local(handler).complete([Message(role="user", content="x")], []))
+    assert calls["n"] == 1

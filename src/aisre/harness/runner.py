@@ -189,6 +189,10 @@ def run_all(
             continue
         try:
             rca = investigate(scenario)
+            print(
+                f"diag: {scenario.id} causa={rca.cause!r} confianca={rca.confidence} desconhecido={rca.unknown}",
+                file=sys.stderr,
+            )
             result = GradedResult(
                 scenario_id=scenario.id,
                 correct=grade(rca, scenario),
@@ -196,7 +200,8 @@ def run_all(
             )
         except ConsentRequired:
             raise  # erro de configuração: o operador precisa ver (o cleanup roda no finally)
-        except Exception:
+        except Exception as exc:
+            print(f"diag: {scenario.id} investiga??o falhou ({type(exc).__name__})", file=sys.stderr)
             result = GradedResult(scenario_id=scenario.id, correct=False, confidence=0.0)
         finally:
             _safe_cleanup(handle)

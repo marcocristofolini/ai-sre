@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import ipaddress
 import json
 import socket
@@ -48,6 +49,17 @@ def is_local_url(url: str) -> bool:
     return ip.is_loopback or ip.is_private or ip.is_link_local
 
 
+# Falhas transit?rias (limite de taxa, 5xx de gateways hospedados, timeouts) n?o devem derrubar a investiga??o.
+_RETRY_STATUS = frozenset({429, 500, 502, 503, 504})
+_RETRY_DELAYS = (1.0, 2.0, 4.0)
+
+
+def _transient(exc: Exception) -> bool:
+    if isinstance(exc, httpx.HTTPStatusError):
+        return exc.response.status_code in _RETRY_STATUS
+    return isinstance(exc, (httpx.TimeoutException, httpx.ConnectError, httpx.RemoteProtocolError))
+
+
 class LocalProvider:
     name = "local"
 
@@ -85,12 +97,7 @@ class LocalProvider:
                 for x in tools
             ]
         try:
-            async with httpx.AsyncClient(
-                timeout=self._timeout, transport=self._transport, trust_env=self._trust_env
-            ) as http:
-                resp = await http.post(self._url, json=body, headers=self._headers)
-                resp.raise_for_status()
-                msg = resp.json()["choices"][0]["message"]
+            msg = await self._post_with_retry(body)
             calls = [
                 ToolCall(id=c["id"], name=c["function"]["name"], args=json.loads(c["function"]["arguments"] or "{}"))
                 for c in msg.get("tool_calls") or []
@@ -98,3 +105,18 @@ class LocalProvider:
         except (httpx.HTTPError, KeyError, IndexError, ValueError) as exc:
             raise RuntimeError(t.ERRO_LLM_FALHA.format(detalhe=type(exc).__name__)) from None
         return LLMResponse(text=msg.get("content") or None, tool_calls=calls)
+
+    async def _post_with_retry(self, body: dict) -> dict:
+        for delay in (*_RETRY_DELAYS, None):
+            try:
+                async with httpx.AsyncClient(
+                    timeout=self._timeout, transport=self._transport, trust_env=self._trust_env
+                ) as http:
+                    resp = await http.post(self._url, json=body, headers=self._headers)
+                    resp.raise_for_status()
+                    return resp.json()["choices"][0]["message"]
+            except httpx.HTTPError as exc:
+                if delay is None or not _transient(exc):
+                    raise
+                await asyncio.sleep(delay)
+        raise AssertionError("inalcan??vel")
