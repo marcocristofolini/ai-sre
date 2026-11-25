@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_root_readme_is_honest_about_status():
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     for needle in (
-        "NÃO verificado em cluster real", "Não existe ainda nenhuma medição de precisão",
+        "NÃO verificado", "medição preliminar e ruidosa", "Resultados medidos",
         "runbooks: não implementado", "Authorization: Bearer", "Licença: Apache-2.0",
         "pytest tests -W error", "npm --prefix web test", "make eval", "deploy/helm/aisre/README.md",
     ):
