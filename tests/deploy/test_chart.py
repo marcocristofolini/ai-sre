@@ -431,7 +431,7 @@ def test_no_secret_in_rendered_defaults():
 
 @needs_helm
 def test_rendered_secret_only_from_user_values():
-    docs = _render("--set", "secrets.create=true", "--set", "secrets.values.sessionSecret=abc")
+    docs = _render("--set", "secrets.existingSecret=", "--set", "secrets.create=true", "--set", "secrets.values.sessionSecret=abc")
     secret = next(d for d in docs if d["kind"] == "Secret" and d["metadata"]["name"].endswith("secrets"))
     assert list(secret.get("stringData", {}) or secret.get("data", {})) == ["session-secret"]
 
@@ -493,7 +493,7 @@ def test_rendered_ingress_excludes_webhook_by_default_and_opt_in():
 @needs_helm
 def test_rendered_secret_checksum_changes_with_secret_content():
     def checksum(value):
-        docs = _render("--set", "secrets.create=true", "--set", f"secrets.values.sessionSecret={value}")
+        docs = _render("--set", "secrets.existingSecret=", "--set", "secrets.create=true", "--set", f"secrets.values.sessionSecret={value}")
         dep = next(d for d in docs if d["kind"] == "Deployment")
         return dep["spec"]["template"]["metadata"]["annotations"]["checksum/secret"]
 
