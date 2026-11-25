@@ -9,13 +9,13 @@ aprovação e um módulo preditivo (Isolation Forest sobre métricas do Promethe
 
 ## Estado atual (leia antes de usar)
 
-- **NÃO verificado em cluster real**, com modelo real nem com o chart Helm instalado. Os testes usam backends falsos
-  (MockTransport, clientes Kubernetes falsos, LLM roteirizado). O `helm template` não foi executado no ambiente de
-  desenvolvimento; o `make eval` (cluster `kind`) também não.
-- **Não existe ainda nenhuma medição de precisão.** O placar (`make eval`) nunca foi rodado com um modelo real; a
-  página Precisão mostra "Sem medição ainda" até existir um placar. O placar mede cenários sintéticos de falha
-  injetada, não produção, e cenários que exigem ferramentas ausentes (Prometheus, Loki, GitHub não vêm no `kind`)
-  aparecem como "não medível neste ambiente", fora do total.
+- **Verificado até aqui:** a suíte de testes (backends falsos), a renderização do chart com `helm` real (testes de
+  deploy) e o harness (`make eval` e `make eval-full`) contra um cluster `kind` real em Docker, em 2026-11-24. **Ainda
+  NÃO verificado:** instalação do chart (`helm install`) em cluster, Postgres com pgvector real, Slack real, navegador
+  real para o dashboard e a primeira execução do CI no GitHub.
+- **Precisão: só uma medição preliminar e ruidosa** (veja [Resultados medidos](#resultados-medidos-preliminares)).
+  O placar mede cenários sintéticos de falha injetada, não produção. Sem ferramentas de métricas/logs (`make eval`),
+  cenários que exigem Prometheus, Loki ou GitHub aparecem como "não medível neste ambiente", fora do total.
 - **Memória de incidentes é usada pelo agente**: RCAs conclusivos são salvos com embedding local (hashing, sem rede;
   pgvector no Postgres) e cada investigação recebe os `AISRE_MEMORY_TOP_K` (padrão 3; 0 desativa) incidentes
   anteriores mais parecidos como contexto **não confiável**: bloco delimitado e redigido como qualquer outro dado,
@@ -160,13 +160,38 @@ AISRE_EVAL_AGENT=1 make eval    # usa o agente real (provedor e ferramentas por 
 
 Requer `kind`, `kubectl` e Docker. O harness recusa `KUBECONFIG` vazio e qualquer contexto diferente de
 `kind-aisre-eval` (`--allow-non-kind` só se você souber o que está fazendo). O JSON traz data, commit, ferramentas
-habilitadas e o resultado de cada cenário. NÃO foi executado no ambiente de desenvolvimento.
+habilitadas e o resultado de cada cenário. Executado com sucesso em kind (Docker, WSL) em 2026-11-24; sem modelo o
+placar é só o baseline "desconhecido" (0 acertos).
+
+Cada cenário imprime em stderr uma linha `diag:` com a causa, a confiança e se o agente respondeu "não sei".
 
 Perfil opcional `make eval-full` (`harness/eval-full.sh`, valores em `harness/full/`): instala kube-prometheus-stack,
 Loki e Promtail no mesmo cluster `kind` e liga as ferramentas `prometheus` e `loki`, para que os cenários de
 métricas e logs passem a ser medíveis (`enabled_tools` do placar vem das ferramentas realmente configuradas; o GitHub
 continua ausente). Exige `helm`, rede e as versões dos charts (`KPS_CHART_VERSION`, `LOKI_CHART_VERSION`,
-`PROMTAIL_CHART_VERSION`; nenhuma foi inventada). **Não verificado**: nunca foi executado. `make eval` não muda.
+`PROMTAIL_CHART_VERSION`; nenhuma foi inventada). Executado com sucesso em 2026-11-24 (charts kube-prometheus-stack 93.10.0, Loki 7.7.0, Promtail 6.17.1). `make eval` não muda.
+
+## Resultados medidos (preliminares)
+
+Medições feitas em 2026-11-24, `kind` + Docker no WSL, commit `5ac3a57` (as duas últimas linhas já com o retry do
+provedor). **Não são uma acurácia do produto**: 7 cenários sintéticos, uma execução por cenário e variação alta entre
+execuções do mesmo modelo.
+
+| Execução | Ferramentas | Modelo | Acertos |
+|---|---|---|---|
+| `make eval` (baseline) | kubernetes | nenhum ("desconhecido") | 0 de 4 |
+| `make eval` | kubernetes | `qwen2.5:7b` (Ollama, CPU) | 1 de 4 |
+| `make eval-full` | kubernetes, prometheus, loki | `qwen2.5:7b` (Ollama, CPU) | 0 de 7 (falhas do provedor por timeout) |
+| `make eval-full` | kubernetes, prometheus, loki | `nvidia/nemotron-3.5-super-vl-120b-a12b` | 1 de 7, depois 3 de 7 |
+
+Na última execução (3 de 7): acertaram `oom-kill`, `crashloop-bad-config` e `dns-failure`; erraram
+`memory-leak-gradual` (o agente descreveu o sintoma, OOM, e não o vazamento gradual), `node-disk-pressure` (o agente
+respondeu esgotamento de `ephemeral-storage` com eviction, que o corretor não aceita como "DiskPressure"; é provável
+falso negativo dos sinônimos, não ajustados para não adequar a nota ao resultado) e `bad-deploy-latency` e
+`latency-creep` (o agente respondeu "não sei"). As causas desses dois últimos não foram investigadas.
+
+O mesmo modelo deu 1 de 7 e 3 de 7 em duas execuções, então qualquer número publicado exige repetições por cenário e
+mais cenários. A calibração da confiança também é fraca na amostra atual.
 
 ## Instalação no Kubernetes
 
@@ -203,9 +228,10 @@ execução real pendente) e usa só o `GITHUB_TOKEN`.
 
 Precisam de infraestrutura real (nada disto foi verificado):
 
-- `make eval` e `make eval-full`: cluster `kind`, Docker, `helm` e (para o agente real) um modelo; só então existe
-  placar de precisão.
-- `helm lint`/`helm template`/instalação do chart (os testes de renderização são pulados sem `helm`) e o Ingress novo.
+- Placar de precisão confiável: repetições por cenário, mais cenários, um modelo maior de produção e a investigação
+  dos cenários em que o agente respondeu "não sei". (`make eval` e `make eval-full` já funcionam em `kind`.)
+- `helm install` do chart em cluster e o Ingress novo (a renderização com `helm` real já é testada; os testes são
+  pulados quando não há `helm`).
 - Postgres com pgvector (imagem `pgvector/pgvector:0.8.0-pg17`): `AISRE_TEST_DATABASE_URL` para
   `tests/test_db_postgres.py` (inclui a exclusão do incidente atual na memória) e a migração 0002.
 - Slack real (assinatura, botão de aprovação, `slack.enabled` + Interactivity) e LLM real.
