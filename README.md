@@ -1,5 +1,7 @@
 # AI SRE
 
+🇧🇷 Português · 🇺🇸 [English](README.en.md)
+
 Análise de causa raiz (RCA) de incidentes de Kubernetes com evidências. Recebe alertas do Alertmanager, investiga
 com ferramentas **somente leitura** (Kubernetes, Prometheus, Loki, GitHub) guiadas por um LLM e entrega um RCA que
 cita as evidências consultadas — ou diz "não sei". Inclui um dashboard (React), publicação no Slack com botão de
