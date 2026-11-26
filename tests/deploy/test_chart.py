@@ -516,3 +516,29 @@ def test_rendered_external_db_has_no_wait_for_postgres():
     docs = _render("--set", "postgres.enabled=false", "--set", "postgres.external.existingSecret=ext-db")
     dep = next(d for d in docs if d["kind"] == "Deployment")
     assert "initContainers" not in dep["spec"]["template"]["spec"]
+
+
+@needs_helm
+def test_rendered_runbooks_mount_and_env_only_when_configured():
+    docs = _render()
+    cm = next(d for d in docs if d["kind"] == "ConfigMap" and "AISRE_MEMORY_TOP_K" in d.get("data", {}))
+    assert cm["data"]["AISRE_RUNBOOKS_TOP_K"] == "2" and "AISRE_RUNBOOKS_DIR" not in cm["data"]
+    dep = next(d for d in docs if d["kind"] == "Deployment")
+    assert "runbooks" not in [v["name"] for v in dep["spec"]["template"]["spec"]["volumes"]]
+
+    docs = _render("--set", "runbooks.configMap=meus-runbooks")
+    cm = next(d for d in docs if d["kind"] == "ConfigMap" and "AISRE_MEMORY_TOP_K" in d.get("data", {}))
+    assert cm["data"]["AISRE_RUNBOOKS_DIR"] == "/app/runbooks"
+    dep = next(d for d in docs if d["kind"] == "Deployment")
+    spec = dep["spec"]["template"]["spec"]
+    assert {"name": "runbooks", "configMap": {"name": "meus-runbooks"}} in spec["volumes"]
+    mounts = spec["containers"][0]["volumeMounts"]
+    assert {"name": "runbooks", "mountPath": "/app/runbooks", "readOnly": True} in mounts
+
+
+@needs_helm
+def test_extra_env_cannot_override_runbooks_dir():
+    import subprocess as sp
+
+    with pytest.raises(sp.CalledProcessError):
+        _render("--set", "extraEnv.AISRE_RUNBOOKS_DIR=/tmp")

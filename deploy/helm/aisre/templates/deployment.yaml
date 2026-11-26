@@ -139,6 +139,11 @@ spec:
               mountPath: /app/eval
               readOnly: true
             {{- end }}
+            {{- with .Values.runbooks.configMap }}
+            - name: runbooks
+              mountPath: /app/runbooks
+              readOnly: true
+            {{- end }}
       volumes:
         - name: tmp
           emptyDir: {}
@@ -149,6 +154,11 @@ spec:
             items:
               - key: scoreboard.json
                 path: scoreboard.json
+        {{- end }}
+        {{- with .Values.runbooks.configMap }}
+        - name: runbooks
+          configMap:
+            name: {{ . }}
         {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:

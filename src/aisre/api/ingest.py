@@ -15,6 +15,7 @@ from aisre.db import Store
 from aisre.llm.base import build_provider
 from aisre.llm.gate import ConsentRequired
 from aisre.memory import Memory, PastIncident
+from aisre.runbooks import Runbook, load_runbooks, select_runbooks
 from aisre.schemas import RCA
 from aisre.tools import build_tools
 
@@ -42,11 +43,22 @@ async def recall_similar(memory: Memory | None, alert: Alert, top_k: int) -> lis
         return []
 
 
+def pick_runbooks(runbooks: list[Runbook], alert: Alert, top_k: int) -> list[Runbook]:
+    return select_runbooks(runbooks, alert.name, alert.labels, top_k)
+
+
 def default_investigator(settings: Settings, memory: Memory | None = None) -> Investigator:
+    # Lidos uma vez na criação: um runbook novo exige reiniciar o pod (o ConfigMap reinicia via checksum).
+    runbooks = load_runbooks(settings.runbooks_dir, settings.runbooks_max_chars)
+
     async def run(alert: Alert) -> RCA:
         # Construído por investigação: falhas de configuração viram incidente falho, não crash.
         past = await recall_similar(memory, alert, settings.memory_top_k)
-        return await investigate(alert, build_tools(settings), build_provider(settings), past=past)
+        chosen = pick_runbooks(runbooks, alert, settings.runbooks_top_k)
+        rca = await investigate(
+            alert, build_tools(settings), build_provider(settings), past=past, runbooks=chosen
+        )
+        return rca.model_copy(update={"runbooks": [rb.name for rb in chosen]}) if chosen else rca
 
     return run
 

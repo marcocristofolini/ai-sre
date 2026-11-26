@@ -17,6 +17,7 @@ class RCA(BaseModel):
     evidence: list[Evidence] = Field(default_factory=list)
     suggested_command: str | None = None
     unknown: bool = False
+    runbooks: list[str] = Field(default_factory=list)  # nomes dos runbooks oferecidos ao agente (contexto, não evidência)
 
     @model_validator(mode="after")
     def _check_consistency(self) -> "RCA":

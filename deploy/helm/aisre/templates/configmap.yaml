@@ -22,6 +22,10 @@ data:
   AISRE_GITHUB_REPO: {{ .Values.github.repo | quote }}
   AISRE_KUBERNETES_ENABLED: {{ .Values.kubernetes.enabled | quote }}
   AISRE_MEMORY_TOP_K: {{ .Values.memory.topK | quote }}
+  AISRE_RUNBOOKS_TOP_K: {{ .Values.runbooks.topK | quote }}
+  {{- if .Values.runbooks.configMap }}
+  AISRE_RUNBOOKS_DIR: "/app/runbooks"
+  {{- end }}
   AISRE_ADMIN_USER: {{ .Values.auth.adminUser | quote }}
   AISRE_SESSION_COOKIE_SECURE: {{ .Values.auth.cookieSecure | quote }}
   AISRE_SESSION_TTL_SECONDS: {{ .Values.auth.sessionTtlSeconds | quote }}
@@ -31,7 +35,7 @@ data:
   FORWARDED_ALLOW_IPS: {{ .Values.proxy.forwardedAllowIps | quote }}
   AISRE_SCOREBOARD_PATH: "/app/eval/scoreboard.json"
   {{- /* extraEnv NÃO pode redefinir chaves gerenciadas pelo chart nem carregar segredos. */ -}}
-  {{- $managed := list "AISRE_LLM_PROVIDER" "AISRE_LLM_MODEL" "AISRE_LLM_BASE_URL" "AISRE_LLM_EXTERNAL_CONSENT" "AISRE_LLM_API_KEY" "AISRE_DATABASE_URL" "AISRE_PROMETHEUS_URL" "AISRE_LOKI_URL" "AISRE_SLACK_CHANNEL" "AISRE_SLACK_APPROVERS" "AISRE_SLACK_BOT_TOKEN" "AISRE_SLACK_SIGNING_SECRET" "AISRE_GITHUB_REPO" "AISRE_GITHUB_TOKEN" "AISRE_KUBERNETES_ENABLED" "AISRE_MEMORY_TOP_K" "AISRE_ADMIN_USER" "AISRE_ADMIN_PASSWORD_HASH" "AISRE_SESSION_SECRET" "AISRE_SESSION_COOKIE_SECURE" "AISRE_SESSION_TTL_SECONDS" "AISRE_PREDICT_WORKLOADS" "AISRE_WEB_DIST_DIR" "AISRE_WEBHOOK_TOKEN" "AISRE_WEBHOOK_ALLOW_UNAUTHENTICATED" "FORWARDED_ALLOW_IPS" "AISRE_SCOREBOARD_PATH" }}
+  {{- $managed := list "AISRE_LLM_PROVIDER" "AISRE_LLM_MODEL" "AISRE_LLM_BASE_URL" "AISRE_LLM_EXTERNAL_CONSENT" "AISRE_LLM_API_KEY" "AISRE_DATABASE_URL" "AISRE_PROMETHEUS_URL" "AISRE_LOKI_URL" "AISRE_SLACK_CHANNEL" "AISRE_SLACK_APPROVERS" "AISRE_SLACK_BOT_TOKEN" "AISRE_SLACK_SIGNING_SECRET" "AISRE_GITHUB_REPO" "AISRE_GITHUB_TOKEN" "AISRE_KUBERNETES_ENABLED" "AISRE_MEMORY_TOP_K" "AISRE_RUNBOOKS_DIR" "AISRE_RUNBOOKS_TOP_K" "AISRE_RUNBOOKS_MAX_CHARS" "AISRE_ADMIN_USER" "AISRE_ADMIN_PASSWORD_HASH" "AISRE_SESSION_SECRET" "AISRE_SESSION_COOKIE_SECURE" "AISRE_SESSION_TTL_SECONDS" "AISRE_PREDICT_WORKLOADS" "AISRE_WEB_DIST_DIR" "AISRE_WEBHOOK_TOKEN" "AISRE_WEBHOOK_ALLOW_UNAUTHENTICATED" "FORWARDED_ALLOW_IPS" "AISRE_SCOREBOARD_PATH" }}
   {{- range $k, $v := .Values.extraEnv }}
   {{- if has (upper $k) $managed }}{{ fail (printf "extraEnv.%s é gerenciada por valores dedicados do chart; use-os" $k) }}{{ end }}
   {{- if regexMatch "(?i)(TOKEN|SECRET|PASSWORD|KEY|HASH)" $k }}{{ fail (printf "extraEnv.%s parece segredo; segredos só via Secret existente (secrets.existingSecret)" $k) }}{{ end }}

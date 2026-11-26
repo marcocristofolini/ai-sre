@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     slack_api_url: str = "https://slack.com/api"
     tool_timeout_seconds: int = 10
     memory_top_k: int = Field(default=3, ge=0)  # incidentes anteriores dados ao agente; 0 desativa
+    runbooks_dir: str = ""  # diretório de runbooks (*.md); vazio = desativado
+    runbooks_top_k: int = Field(default=2, ge=0)  # runbooks oferecidos por investigação; 0 desativa
+    runbooks_max_chars: int = Field(default=4000, ge=200, le=20000)  # corpo máximo por runbook
     github_token: SecretStr = SecretStr("")
     github_repo: str = ""
     github_api_url: str = "https://api.github.com"

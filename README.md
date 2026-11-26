@@ -23,8 +23,10 @@ aprovação e um módulo preditivo (Isolation Forest sobre métricas do Promethe
   anteriores mais parecidos como contexto **não confiável**: bloco delimitado e redigido como qualquer outro dado,
   sem id citável (nunca é evidência, não eleva a confiança nem dispensa o "não sei"). Falha na consulta é só
   registrada (tipo da exceção) e a investigação segue sem ela. O embedding é um hashing de tokens (lexical, não
-  semântico) e não foi avaliado quanto à utilidade. Notas de resolução não são armazenadas; 
-  runbooks: não implementado (fora do escopo da v1).
+  semântico) e não foi avaliado quanto à utilidade. Notas de resolução não são armazenadas.
+- **Runbooks** (Markdown do operador, `AISRE_RUNBOOKS_DIR`; Helm `runbooks.configMap`): os `AISRE_RUNBOOKS_TOP_K` (padrão 2)
+  que casam com o alerta vão ao agente como contexto **não confiável**, sem id citável (nunca evidência). Veja
+  [docs/runbooks.md](docs/runbooks.md). Ainda não medido no harness quanto ao ganho de precisão.
 - Os testes de integração com Postgres (`tests/test_db_postgres.py`) rodam só com `AISRE_TEST_DATABASE_URL`.
 - Licença: Apache-2.0 (veja `LICENSE` e `NOTICE`; copyright 2026 Marco Fabricio Cristofolini).
 

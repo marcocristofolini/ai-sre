@@ -142,3 +142,6 @@ AVISO_PREDITIVO_INVESTIGACAO_FALHOU = "falha ao abrir investigação preditiva (
 AVISO_PLACAR_ILEGIVEL = "arquivo do placar ilegível ou inválido ({tipo})"
 AVISO_PREDITIVO_REFIT_FALHOU = "reajuste periódico do detector preditivo falhou ({tipo}); o modelo atual é mantido"
 AVISO_PREDITIVO_RETRY_FALHOU = "novo backfill preditivo falhou ({tipo}); nova tentativa com espera maior"
+
+AVISO_RUNBOOKS_DIR_INVALIDO = "AISRE_RUNBOOKS_DIR não é um diretório legível; nenhum runbook foi carregado"
+AVISO_RUNBOOK_IGNORADO = "runbook ignorado: {nome} ({motivo})"

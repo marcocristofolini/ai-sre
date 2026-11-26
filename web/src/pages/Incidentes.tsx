@@ -163,6 +163,17 @@ export function IncidentView({ id }: { id: number }) {
                     <h2>{rca.unknown ? S.incidente.evidenciasColetadas : S.incidente.evidencias}</h2>
                     <EvidenceList items={rca.evidence} />
                   </div>
+                  {rca.runbooks && rca.runbooks.length > 0 && (
+                    <div className="card">
+                      <h2>{S.incidente.runbooks}</h2>
+                      <ul>
+                        {rca.runbooks.map((name) => (
+                          <li key={name}>{name}</li>
+                        ))}
+                      </ul>
+                      <p className="muted">{S.incidente.runbooksAviso}</p>
+                    </div>
+                  )}
                   {!rca.unknown && rca.suggested_command && <Approve inc={inc} onDone={state.reload} />}
                 </>
               )}

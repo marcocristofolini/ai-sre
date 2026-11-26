@@ -25,6 +25,8 @@ export const S = {
     evidencias: "Evidências",
     evidenciasColetadas: "Evidências coletadas",
     semEvidencias: "Nenhuma evidência coletada.",
+    runbooks: "Runbooks oferecidos ao agente",
+    runbooksAviso: "Contexto escrito pelo operador: não são evidência e não aumentam a confiança.",
     confianca: (pct: number) => `Confiança ${pct}%`,
     nivel: { alta: "alta", media: "média", baixa: "baixa" },
     comando: "Comando sugerido",

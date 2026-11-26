@@ -62,6 +62,13 @@ kubernetes:
 memory:
   topK: 3                  # incidentes anteriores semelhantes dados ao agente como contexto não confiável; 0 desativa
 
+# Runbooks do operador (Markdown com cabeçalho; formato em docs/runbooks.md). São contexto para o agente: dado
+# não confiável, nunca evidência. Crie o ConfigMap com `kubectl create configmap NOME --from-file=runbooks/` e
+# informe o nome aqui. Ele é lido na inicialização: depois de mudar o ConfigMap, `kubectl rollout restart`.
+runbooks:
+  configMap: ""            # vazio = runbooks desativados
+  topK: 2                  # runbooks oferecidos por investigação; 0 desativa
+
 auth:
   adminUser: admin
   cookieSecure: true       # false só em testes via port-forward (http)

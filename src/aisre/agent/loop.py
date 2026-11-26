@@ -164,11 +164,13 @@ async def investigate(
     llm: LLMProvider,
     max_steps: int = 12,
     past: list | None = None,
+    runbooks: list | None = None,
 ) -> RCA:
     """Investiga o alerta. Nunca levanta exceção, exceto `ConsentRequired` (erro de configuração).
 
     `past`: incidentes anteriores semelhantes (`PastIncident`), entregues como dado não confiável
-    e sem id: nunca são evidência citável (os ids E1.. vêm só das ferramentas desta investigação)."""
+    e sem id: nunca são evidência citável (os ids E1.. vêm só das ferramentas desta investigação).
+    `runbooks`: roteiros do operador (`Runbook`), com o mesmo tratamento: dado não confiável, sem id."""
     inv = _Investigation(tools)
     specs = inv.specs()
     messages = [
@@ -180,6 +182,7 @@ async def investigate(
                 for part in (
                     p.render_alert(alert.name, alert.labels, alert.fired_at.isoformat()),
                     p.render_past_incidents(past or []),
+                    p.render_runbooks(runbooks or []),
                 )
                 if part
             ),

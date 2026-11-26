@@ -49,6 +49,7 @@ export type Rca = {
   evidence: Evidence[];
   suggested_command: string | null;
   unknown: boolean;
+  runbooks?: string[];
 };
 export type Incident = {
   id: number;

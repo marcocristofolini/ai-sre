@@ -436,3 +436,36 @@ def test_system_prompt_has_no_scenario_answer():
     prompt = SYSTEM_PROMPT.casefold()
     for s in SCENARIOS:
         assert s.expected_cause.casefold() not in prompt, s.id
+
+
+# --- runbooks: contexto não confiável, nunca evidência -----------------------
+
+
+def _runbook(body="Veja os logs do contêiner anterior."):
+    from aisre.runbooks import Runbook
+
+    return Runbook(name="crashloop", title="CrashLoop", body=body, alerts=("KubePodCrashLooping",))
+
+
+def test_runbooks_are_delivered_as_untrusted_block_and_prompt_explains_it():
+    llm = FakeLLM([final(None, [], confidence=0.0)])
+    run([FakeTool("kubernetes", [ok("k8s:pod/api-1")])], llm, runbooks=[_runbook()])
+    user = next(m for m in llm.calls[0][0] if m.role == "user").content
+    assert 'origem="runbooks"' in user and "runbook crashloop" in user
+    assert " id=" not in user.split('origem="runbooks"')[1]
+    assert 'origem="runbooks"' in SYSTEM_PROMPT
+
+
+def test_runbook_cannot_be_cited_as_evidence():
+    # Citar o runbook (ou qualquer id que não veio de uma consulta) é descartado: sem evidência real, "não sei".
+    llm = FakeLLM([final("config inválida", ["crashloop", "runbook:crashloop"])])
+    rca = run([FakeTool("kubernetes", [ok("k8s:pod/api-1")])], llm, runbooks=[_runbook()])
+    assert rca.unknown and rca.cause is None
+    assert rca.evidence == []
+
+
+def test_no_runbooks_means_no_runbook_block():
+    llm = FakeLLM([final(None, [], confidence=0.0)])
+    run([FakeTool("kubernetes", [ok("k8s:pod/api-1")])], llm)
+    user = next(m for m in llm.calls[0][0] if m.role == "user").content
+    assert 'origem="runbooks"' not in user

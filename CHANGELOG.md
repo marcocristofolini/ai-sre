@@ -4,6 +4,10 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/); 
 
 ## [Não lançado]
 
+- **Runbooks:** Markdown do operador (`AISRE_RUNBOOKS_DIR`, Helm `runbooks.configMap`) oferecido ao agente como contexto não
+  confiável, sem id citável (nunca evidência). O RCA lista os runbooks oferecidos (`runbooks`) e o dashboard mostra o
+  cartão. Veja `docs/runbooks.md` e `examples/runbooks/`.
+
 ## [0.1.1] - 2026-11-26
 
 - **Chart:** novo initContainer `wait-for-postgres`. Na primeira instalação o app subia antes do Postgres, estourava o

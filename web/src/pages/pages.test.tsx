@@ -295,3 +295,19 @@ test("comando com quebra de linha explica por que nao ha botao de aprovar", asyn
   expect(await screen.findByText(/quebra de linha\/caracteres de controle não pode ser aprovado/)).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: S.incidente.aprovar })).not.toBeInTheDocument();
 });
+
+test("Incidente mostra os runbooks oferecidos como contexto, nao como evidencia", async () => {
+  const base = incident();
+  open(42, {
+    "GET /incidents/42": incident({ rca: { ...base.rca, runbooks: ["crashloop", "oom"] } }),
+  });
+  expect(await screen.findByText(S.incidente.runbooks)).toBeInTheDocument();
+  expect(screen.getByText("crashloop")).toBeInTheDocument();
+  expect(screen.getByText(S.incidente.runbooksAviso)).toBeInTheDocument();
+});
+
+test("Incidente sem runbooks nao mostra o cartao", async () => {
+  open(42, { "GET /incidents/42": incident() });
+  await screen.findByText("deploy 14:03 aumentou memória do pod api");
+  expect(screen.queryByText(S.incidente.runbooks)).not.toBeInTheDocument();
+});
