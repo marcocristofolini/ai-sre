@@ -239,5 +239,10 @@ Precisam de infraestrutura real (nada disto foi verificado):
 
 Decisões do dono do projeto:
 
-- Primeiro usuário real e modelo de monetização.
+- Primeiro usuário real. O projeto é distribuído à comunidade, sem monetização.
 - Referências visuais (Sherlocks) para o dashboard.
+
+## Contribuindo
+
+Veja [CONTRIBUTING.md](CONTRIBUTING.md), o [código de conduta](CODE_OF_CONDUCT.md), o [CHANGELOG](CHANGELOG.md) e a
+[política de segurança](SECURITY.md).

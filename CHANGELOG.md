@@ -1,0 +1,16 @@
+# Changelog
+
+Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/); versionamento semântico.
+
+## [Não lançado]
+
+## [0.1.0] - 2026-11-25
+
+Primeira versão. Somente leitura: investiga alertas e entrega causa provável com evidências citadas e confiança;
+comandos são apenas sugeridos.
+
+- Agente com Kubernetes, Prometheus, Loki, GitHub e Slack; memória de incidentes; detecção preditiva (Isolation
+  Forest); LLM próprio (Anthropic ou endpoint compatível com OpenAI) com consentimento e redação.
+- Dashboard em português, instalação por Helm, imagem e chart publicados no GHCR.
+- Harness de precisão com cluster `kind` (`make eval`, `make eval-full`). **Medição preliminar e ruidosa**: veja o
+  README. O provedor local repete falhas transitórias (429/5xx/timeouts) com backoff.

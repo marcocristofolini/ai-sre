@@ -1,0 +1,18 @@
+name: Bug
+description: Algo não funciona como o esperado
+labels: [bug]
+body:
+  - type: textarea
+    id: o-que
+    attributes: {label: O que aconteceu e o que você esperava}
+    validations: {required: true}
+  - type: textarea
+    id: repro
+    attributes: {label: Passos para reproduzir}
+    validations: {required: true}
+  - type: input
+    id: versao
+    attributes: {label: Versão (tag da imagem ou commit)}
+  - type: textarea
+    id: ambiente
+    attributes: {label: Ambiente, description: "Kubernetes, provedor de LLM, ferramentas habilitadas. Não cole segredos."}

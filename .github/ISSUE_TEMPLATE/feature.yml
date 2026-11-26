@@ -1,0 +1,11 @@
+name: Ideia ou melhoria
+description: Proponha algo novo
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problema
+    attributes: {label: Qual problema isto resolve?}
+    validations: {required: true}
+  - type: textarea
+    id: proposta
+    attributes: {label: Proposta, description: "Lembre: o produto é somente leitura e nada é executado."}
