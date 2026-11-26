@@ -32,6 +32,10 @@ aprovação e um módulo preditivo (Isolation Forest sobre métricas do Promethe
 
 ## Screenshots
 
+![Demonstração do dashboard (dados sintéticos)](docs/demo.gif)
+
+*Dados sintéticos de demonstração (`scripts/demo_server.py`); nenhum número de precisão é mostrado.*
+
 Dashboard real (React, servido pela API), rodando com **dados de demonstração** sintéticos gerados por
 [`scripts/demo_server.py`](scripts/demo_server.py) (`.venv/bin/python scripts/demo_server.py`, com `web/dist` construído).
 Os incidentes, RCAs e séries são inventados e rotulados "dados de demonstração". **Não existe nenhuma medição de

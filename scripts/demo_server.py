@@ -99,6 +99,7 @@ def _seed(store: MemoryStore, clock_box: list[datetime], now: datetime) -> None:
                          summary="Estado CrashLoopBackOff, 14 reinícios, último motivo: Error (dado sintético)."),
             ],
             suggested_command="kubectl logs relatorios-batch-6c8d-x2k9p -n demo --previous",
+            runbooks=["crashloop"],
         ))
 
         i2 = await add(120, "KubeNodeDiskPressure", label("kube-system", node="no-demo-2"))
@@ -142,6 +143,7 @@ def _seed(store: MemoryStore, clock_box: list[datetime], now: datetime) -> None:
                          summary="Memória sobe até o limite antes de cada reinício (dado sintético)."),
             ],
             suggested_command="kubectl describe pod pagamentos-api-7d9c-m4n8p -n demo",
+            runbooks=["oom-prod"],
         ))
 
         i6 = await add(2, "KubeJobFailed", label("demo", job="exporta-relatorio"))

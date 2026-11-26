@@ -32,6 +32,10 @@ Single-tenant, installed with Helm, Apache-2.0. Not a hosted service and not mon
 
 ## Try it
 
+![Dashboard demo (synthetic data)](docs/demo.gif)
+
+*Synthetic demo data (`scripts/demo_server.py`); the UI is in Portuguese.*
+
 Run the API locally (the dashboard is served at `/` if `web/dist` exists):
 
 ```bash
