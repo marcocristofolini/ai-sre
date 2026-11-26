@@ -32,6 +32,23 @@ spec:
       {{- end }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- if .Values.postgres.enabled }}
+      initContainers:
+        {{- /* O app falha ao iniciar se o Postgres ainda não aceita conexões (PoolTimeout) e só se recupera
+               reiniciando. Esperar o banco aqui evita a falha e o restart na primeira instalação. */}}
+        - name: wait-for-postgres
+          image: "{{ .Values.postgres.image.repository }}:{{ .Values.postgres.image.tag }}"
+          imagePullPolicy: {{ .Values.postgres.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          command:
+            - sh
+            - -c
+            - >-
+              until pg_isready -h {{ include "aisre.fullname" . }}-postgres -p 5432
+              -U {{ .Values.postgres.auth.username | quote }} -d {{ .Values.postgres.auth.database | quote }};
+              do echo "aguardando o Postgres"; sleep 2; done
+      {{- end }}
       containers:
         - name: aisre
           image: {{ include "aisre.image" . | quote }}

@@ -498,3 +498,21 @@ def test_rendered_secret_checksum_changes_with_secret_content():
         return dep["spec"]["template"]["metadata"]["annotations"]["checksum/secret"]
 
     assert checksum("a") != checksum("b") and checksum("a") == checksum("a")
+
+
+@needs_helm
+def test_rendered_app_waits_for_postgres_before_starting():
+    # Sem a espera, o app sobe antes do banco, estoura o PoolTimeout e só se recupera reiniciando.
+    dep = next(d for d in _render() if d["kind"] == "Deployment")
+    inits = dep["spec"]["template"]["spec"].get("initContainers", [])
+    assert [c["name"] for c in inits] == ["wait-for-postgres"]
+    script = " ".join(inits[0]["command"])
+    assert "pg_isready" in script and "aisre-postgres" in script
+    assert inits[0]["securityContext"]["allowPrivilegeEscalation"] is False
+
+
+@needs_helm
+def test_rendered_external_db_has_no_wait_for_postgres():
+    docs = _render("--set", "postgres.enabled=false", "--set", "postgres.external.existingSecret=ext-db")
+    dep = next(d for d in docs if d["kind"] == "Deployment")
+    assert "initContainers" not in dep["spec"]["template"]["spec"]
