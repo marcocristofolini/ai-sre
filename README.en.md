@@ -49,6 +49,8 @@ To see the dashboard with synthetic data only (no cluster, no LLM): `.venv/bin/p
 
 ## Install on Kubernetes
 
+Step-by-step kind install (verified, in Portuguese): [docs/quickstart.md](docs/quickstart.md).
+
 Helm chart in [deploy/helm/aisre](deploy/helm/aisre/README.md): Secrets by reference (`existingSecret`), Alertmanager
 with a Bearer token, optional Ingress and NetworkPolicy. Images and chart are published to GHCR on each `vX.Y.Z` tag:
 `ghcr.io/marcocristofolini/ai-sre:X.Y.Z` and `oci://ghcr.io/marcocristofolini/charts/aisre`. There is no `latest` tag.

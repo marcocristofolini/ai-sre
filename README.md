@@ -127,6 +127,10 @@ Passo a passo:
   dashboard e o Slack avisam isso e marcam comandos fora da lista `kubectl get/describe/logs/top`.
 - Falhas são registradas só pelo tipo da exceção; nenhum segredo tem valor padrão. Veja [SECURITY.md](SECURITY.md).
 
+## Quickstart
+
+Instalação num cluster kind em ~5 minutos (verificada): [docs/quickstart.md](docs/quickstart.md).
+
 ## Desenvolvimento
 
 ```bash

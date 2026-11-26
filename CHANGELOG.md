@@ -4,6 +4,12 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/); 
 
 ## [Não lançado]
 
+## [0.1.1] - 2026-11-26
+
+- **Chart:** novo initContainer `wait-for-postgres`. Na primeira instalação o app subia antes do Postgres, estourava o
+  `PoolTimeout` e só funcionava depois de um restart (encontrado ao instalar o chart num kind real).
+- Adiciona `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `docs/quickstart.md`, `README.en.md` e templates de issue/PR.
+
 ## [0.1.0] - 2026-11-25
 
 Primeira versão. Somente leitura: investiga alertas e entrega causa provável com evidências citadas e confiança;
